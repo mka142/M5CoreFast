@@ -1,5 +1,14 @@
 #include "TextAdapter.h"
 #include <M5GFX.h>
+// ...existing includes...
+
+TextAdapter::TextAdapter(DisplayAdapter &display)
+    : display(display)
+{
+    // Optionally, initialize fonts or other members here
+}
+#include "TextAdapter.h"
+#include <M5GFX.h>
 #include "../ui/fonts/FreeSans9pt8b.h"
 #include "../ui/fonts/FreeSans12pt8b.h"
 #include "../ui/fonts/FreeSans18pt8b.h"
@@ -17,7 +26,7 @@
 #include "../ui/fonts/FreeSerif18pt8b.h"
 #include "../ui/fonts/FreeSerif24pt8b.h"
 
-void TextAdapter::begin(DisplayAdapter *disp)
+void TextAdapter::begin(DisplayAdapter &disp)
 {
     display = disp;
     configureFonts();
@@ -111,43 +120,43 @@ const GFXfont *TextAdapter::getFont(FontStyle style, FontSize size)
 
 void TextAdapter::setFont(FontStyle style, FontSize size)
 {
-    display->getDisplay().setFont(getFont(style, size));
+    display.getDisplay().setFont(getFont(style, size));
 }
 
-int TextAdapter::getTextWidth(const char *text)
+int TextAdapter::getTextWidth(const std::string &text)
 {
-    return display->getDisplay().textWidth(text);
+    return display.getDisplay().textWidth(text.c_str());
 }
 
 int TextAdapter::getTextHeight()
 {
-    return display->getDisplay().fontHeight();
+    return display.getDisplay().fontHeight();
 }
 
-int TextAdapter::measureTextWidth(const char *text, FontStyle style, FontSize size)
+int TextAdapter::measureTextWidth(const std::string &text, FontStyle style, FontSize size)
 {
     setFont(style, size);
     return getTextWidth(text);
 }
 
-int TextAdapter::measureTextHeight(const char *text, FontStyle style, FontSize size)
+int TextAdapter::measureTextHeight(const std::string &text, FontStyle style, FontSize size)
 {
     setFont(style, size);
     return getTextHeight();
 }
 
-void TextAdapter::drawText(const char *text, int x, int y, FontStyle style, FontSize size)
+void TextAdapter::drawText(const std::string &text, int x, int y, FontStyle style, FontSize size)
 {
     setFont(style, size);
-    display->getDisplay().setCursor(x, y);
-    display->getDisplay().print(text);
+    display.getDisplay().setCursor(x, y);
+    display.getDisplay().print(text.c_str());
 }
 
-void TextAdapter::drawText(const char *text, TextAlignX alignX, TextAlignY alignY, FontStyle style, FontSize size)
+void TextAdapter::drawText(const std::string &text, TextAlignX alignX, TextAlignY alignY, FontStyle style, FontSize size)
 {
     setFont(style, size);
-    int w = display->width();
-    int h = display->height();
+    int w = display.width();
+    int h = display.height();
     int textW = getTextWidth(text);
     int textH = getTextHeight();
 

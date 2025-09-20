@@ -41,21 +41,21 @@ struct FontConfig
 class TextAdapter
 {
 public:
-    void begin(DisplayAdapter *disp);
+    TextAdapter(DisplayAdapter &display);
+    void begin(DisplayAdapter &disp);
     void configureFonts();
     void setFont(FontStyle style, FontSize size);
-    void drawText(const char *text, int x, int y, FontStyle style, FontSize size);
-    void drawText(const char *text, TextAlignX alignX, TextAlignY alignY, FontStyle style, FontSize size);
-    int measureTextWidth(const char *text, FontStyle style, FontSize size);
-    int measureTextHeight(const char *text, FontStyle style, FontSize size);
+    void drawText(const std::string &text, int x, int y, FontStyle style, FontSize size);
+    void drawText(const std::string &text, TextAlignX alignX, TextAlignY alignY, FontStyle style, FontSize size);
+    int measureTextWidth(const std::string &text, FontStyle style, FontSize size);
+    int measureTextHeight(const std::string &text, FontStyle style, FontSize size);
     const GFXfont *getFont(FontStyle style, FontSize size);
 
-private:
-    DisplayAdapter *display;
+    DisplayAdapter &display;
     FontConfig normalFonts;
     FontConfig boldFonts;
     FontConfig italicFonts;
     FontConfig serifFonts;
-    int getTextWidth(const char *text);
+    int getTextWidth(const std::string &text);
     int getTextHeight();
 };

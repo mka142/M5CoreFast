@@ -7,26 +7,29 @@
 #include "../ui/PageID.h"
 #include "IPageNavigator.h"
 
-class Page {
+class Page
+{
 
 public:
     Page(PageID id,
-         DisplayAdapter* display,
-         TextAdapter* text,
-         HMIAdapter* hmi,
-         RGBAdapter* rgb,
-         IPageNavigator* navigator = nullptr)
+         DisplayAdapter &display,
+         TextAdapter &text,
+         HMIAdapter &hmi,
+         RGBAdapter &rgb,
+         IPageNavigator *navigator = nullptr)
         : id(id), display(display), text(text), hmi(hmi), rgb(rgb), navigator(navigator) {}
 
     virtual ~Page() {}
 
     PageID getID() const { return id; }
 
-    void setNavigator(IPageNavigator* nav) { navigator = nav; }
+    void setNavigator(IPageNavigator *nav) { navigator = nav; }
 
     // Allow page to request a page change
-    void requestPageChange(PageID id) {
-        if (navigator) navigator->requestPageChange(id);
+    void requestPageChange(PageID id)
+    {
+        if (navigator)
+            navigator->requestPageChange(id);
     }
 
     // Called once when the page is rendered for the first time after navigation
@@ -42,9 +45,9 @@ public:
 
 protected:
     PageID id;
-    DisplayAdapter* display;
-    TextAdapter* text;
-    HMIAdapter* hmi;
-    RGBAdapter* rgb;
-    IPageNavigator* navigator;
+    DisplayAdapter &display;
+    TextAdapter &text;
+    HMIAdapter &hmi;
+    RGBAdapter &rgb;
+    IPageNavigator *navigator;
 };

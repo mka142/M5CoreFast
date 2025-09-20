@@ -19,14 +19,14 @@
 #define NTP_SERVER3 "2.pool.ntp.org"
 
 DisplayAdapter displayAdapter;
-TextAdapter textAdapter;
+TextAdapter textAdapter(displayAdapter);
 WiFiAdapter wifi;
 RTCAdapter rtc;
 HMIAdapter hmi;
 RGBAdapter rgb;
 PageManager pageManager;
-HomePage homePage(&displayAdapter, &textAdapter, &hmi, &rgb, &pageManager);
-TestPage2 testPage2(&displayAdapter, &textAdapter, &hmi, &rgb, &pageManager);
+HomePage homePage(displayAdapter, textAdapter, hmi, rgb, &pageManager);
+TestPage2 testPage2(displayAdapter, textAdapter, hmi, rgb, &pageManager);
 
 void setup()
 {
@@ -42,7 +42,7 @@ void setup()
 
     displayAdapter.begin();
     displayAdapter.configure();
-    textAdapter.begin(&displayAdapter);
+    textAdapter.begin(displayAdapter);
 
     displayAdapter.clear();
     textAdapter.setFont(FontStyle::Normal, FontSize::Normal);
