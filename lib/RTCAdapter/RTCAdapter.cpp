@@ -47,3 +47,11 @@ String RTCAdapter::getTimeISO()
             timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
     return String(buf);
 }
+
+unsigned long long RTCAdapter::getUnixTimestampMs()
+{
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    // Convert to milliseconds: seconds * 1000 + microseconds / 1000
+    return ((unsigned long long)tv.tv_sec * 1000ULL) + (tv.tv_usec / 1000ULL);
+}

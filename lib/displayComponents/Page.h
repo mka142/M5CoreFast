@@ -9,7 +9,6 @@
 
 class Page
 {
-
 public:
     Page(PageID id,
          DisplayAdapter &display,
@@ -32,6 +31,10 @@ public:
             navigator->requestPageChange(id);
     }
 
+    // Payload setter/getter for event data
+    virtual void setPayload(const EventSchema& payload) { eventPayload = payload; }
+    virtual const EventSchema& getPayload() const { return eventPayload; }
+
     // Called once when the page is rendered for the first time after navigation
     virtual void firstRender() {}
 
@@ -50,4 +53,5 @@ protected:
     HMIAdapter &hmi;
     RGBAdapter &rgb;
     IPageNavigator *navigator;
+    EventSchema eventPayload; // Holds the latest event data
 };

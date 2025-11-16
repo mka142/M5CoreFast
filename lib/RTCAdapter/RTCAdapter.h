@@ -8,4 +8,5 @@ public:
     void setLocalTime(const char *tz, const char *server1, const char *server2, const char *server3);
     tm getTime();
     String getTimeISO();
+    unsigned long long getUnixTimestampMs(); // Get Unix timestamp in milliseconds
 };

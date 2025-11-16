@@ -5,7 +5,7 @@
 
 class PageManager : public IPageNavigator {
 public:
-    PageManager() : currentPage(nullptr), requestedPageID(PAGE_HOME), lastPage(nullptr) {}
+    PageManager() : currentPage(nullptr), requestedPageID(BEFORE_CONCERT), lastPage(nullptr) {}
 
     void registerPage(PageID id, Page* page) {
         pages[id] = page;
@@ -32,6 +32,14 @@ public:
 
     Page* getCurrentPage() {
         return currentPage;
+    }
+    
+    Page* getPage(PageID id) {
+        auto it = pages.find(id);
+        if (it != pages.end()) {
+            return it->second;
+        }
+        return nullptr;
     }
 
 private:
