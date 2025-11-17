@@ -18,3 +18,22 @@ void RGBAdapter::setColor(uint8_t r, uint8_t g, uint8_t b)
     }
     rgb->show();
 }
+
+void RGBAdapter::setPixel(int index, uint8_t r, uint8_t g, uint8_t b)
+{
+    if (index >= 0 && index < _num_leds)
+    {
+        rgb->setPixelColor(index, rgb->Color(r, g, b));
+    }
+}
+
+void RGBAdapter::show()
+{
+    rgb->show();
+}
+
+void RGBAdapter::clear()
+{
+    rgb->clear();
+    rgb->show();
+}
