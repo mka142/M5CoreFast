@@ -1,193 +1,190 @@
-#include <DisplayAdapter.h>
-#include <TextAdapter.h>
-#include <WiFiAdapter.h>
-#include <RTCAdapter.h>
-#include <HMIAdapter.h>
-#include <RGBAdapter.h>
-#include <MQTTAdapter.h>
-#include <MQTTPageBridge.h>
-#include <HTTPAdapter.h>
-
+#include <Arduino.h>
 #include <M5CoreS3.h>
 
-#include "pages/BeforeConcert.h"
-#include "pages/OvationPage.h"
-#include "pages/TensionMeasurementPage.h"
-#include "pages/AppGuidePage.h"
-#include "pages/SliderDemoPage.h"
-#include "pages/ConcertStartPage.h"
-#include "pages/PieceAnnouncementPage.h"
-#include "pages/EndOfConcertPage.h"
+// LVGL - LV_CONF_INCLUDE_SIMPLE is defined in platformio.ini
+#include <lvgl.h>
 
-#include <PageManager.h>
+// Our simple display driver
+#include <LVGLDisplay.h>
 
-#define WIFI_SSID ""
-#define WIFI_PASSWORD ""
-#define NTP_TIMEZONE "UTC+2"
-#define NTP_SERVER1 "0.pool.ntp.org"
-#define NTP_SERVER2 "1.pool.ntp.org"
-#define NTP_SERVER3 "2.pool.ntp.org"
-
-// MQTT Configuration
-#define MQTT_SERVER "192.168.1.20" //"server.device-manager.fast.knakitm.pl"
-#define MQTT_PORT 1883
-
-// DEVICE_ID is set at build time via deploy script
-// If not set, use a default value
-#ifndef DEVICE_ID
-#define DEVICE_ID "device_default"
-#endif
-
-// Convert macro to string for use in constructors
-#define STRINGIFY(x) #x
-#define TOSTRING(x) STRINGIFY(x)
-const char* MQTT_CLIENT_ID = TOSTRING(DEVICE_ID);
-
-#define MQTT_USERNAME "your_username" // Optional
-#define MQTT_PASSWORD "your_password" // Optional
-#define MQTT_TOPIC_EVENTS "events/broadcast"
-#define MQTT_TOPIC_STATUS "display/status"
-
-// API Configuration
-#define FORM_API_HOST "http://192.168.1.20:3001/api/forms/batch" //"https://server.device-manager.fast.knakitm.pl/api/forms/batch"
-
-DisplayAdapter displayAdapter;
-TextAdapter textAdapter(displayAdapter);
-WiFiAdapter wifi;
-RTCAdapter rtc;
-HMIAdapter hmi;
-RGBAdapter rgb;
-PageManager pageManager;
+// Page management
+#include <PageNavigator.h>
+#include <PageID.h>
 
 // Pages
-BeforeConcertPage beforeConcertPage(displayAdapter, textAdapter, hmi, rgb, &pageManager);
-OvationPage ovationPage(displayAdapter, textAdapter, hmi, rgb, &pageManager);
-AppGuidePage appGuidePage(displayAdapter, textAdapter, hmi, rgb, &pageManager);
-SliderDemoPage sliderDemoPage(displayAdapter, textAdapter, hmi, rgb, &pageManager);
-ConcertStartPage concertStartPage(displayAdapter, textAdapter, hmi, rgb, &pageManager);
-PieceAnnouncementPage pieceAnnouncementPage(displayAdapter, textAdapter, hmi, rgb, &pageManager);
-EndOfConcertPage endOfConcertPage(displayAdapter, textAdapter, hmi, rgb, &pageManager);
+#include "pages/LoadingPage.h"
+#include "pages/BeforeConcertPage.h"
+#include "pages/SliderDemoPage.h"
+#include "pages/TensionMeasurementPage.h"
 
-// MQTT components - independent and loosely coupled
-MQTTAdapter mqttAdapter(MQTT_SERVER, MQTT_PORT, MQTT_CLIENT_ID);
-MQTTPageBridge mqttPageBridge(mqttAdapter, pageManager);
+// Adapters
+#include <HMIAdapter.h>
+#include <RGBAdapter.h>
 
-// HTTP adapter for API requests
-HTTPAdapter httpAdapter;
+// Display resolution
+constexpr int32_t HOR_RES = 320;
+constexpr int32_t VER_RES = 240;
 
-// Tension measurement page (requires RTC and HTTP adapter)
-TensionMeasurementPage tensionPage(displayAdapter, textAdapter, hmi, rgb, rtc, httpAdapter,
-                                   FORM_API_HOST, MQTT_CLIENT_ID, &pageManager);
+// Global objects
+PageNavigator navigator;
+HMIAdapter hmi;
+RGBAdapter rgb;
 
-void setup()
-{
-    // Initialize Serial for debugging
+// Current encoder value for UI updates
+int lastEncoderValue = 0;
+int tensionBufferCount = 0;
+
+// Touch input for LVGL
+void touchpad_read(lv_indev_t *drv, lv_indev_data_t *data) {
+    M5.update();
+    auto count = M5.Touch.getCount();
+    
+    if (count == 0) {
+        data->state = LV_INDEV_STATE_RELEASED;
+    } else {
+        auto touch = M5.Touch.getDetail(0);
+        data->state = LV_INDEV_STATE_PRESSED;
+        data->point.x = touch.x;
+        data->point.y = touch.y;
+    }
+}
+
+void setup() {
+    // Initialize Serial FIRST with delays
     Serial.begin(115200);
-    while (!Serial)
-        ;
-
-    Serial.println("Starting system...");
-    Serial.print("Device ID: ");
-    Serial.println(MQTT_CLIENT_ID);
-
-    // This is required to initialize M5CoreS3 components
-    CoreS3.begin();
-
-    displayAdapter.begin();
-    displayAdapter.configure();
-    textAdapter.begin(displayAdapter);
-
-    displayAdapter.clear();
-    textAdapter.setFont(FontStyle::Normal, FontSize::Normal);
-
-    rgb.begin(5, 10); // Pin 5, 10 LEDs
+    delay(2000);  // Longer delay for serial
+    
+    Serial.println("\n\n\n");
+    Serial.println("================================");
+    Serial.println("=== M5CoreFast LVGL ===");
+    Serial.println("================================");
+    
+    // Initialize M5CoreS3
+    Serial.println("1. Initializing M5CoreS3...");
+    auto cfg = M5.config();
+    CoreS3.begin(cfg);
+    Serial.println("2. M5CoreS3 initialized!");
+    
+    // Initialize LVGL
+    Serial.println("3. Initializing LVGL...");
+    LVGLDisplay::init(HOR_RES, VER_RES);
+    Serial.println("4. LVGL initialized!");
+    
+    // Setup touch input
+    Serial.println("5. Setting up touch input...");
+    lv_indev_t *indev = lv_indev_create();
+    lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+    lv_indev_set_read_cb(indev, touchpad_read);
+    Serial.println("6. Touch input configured!");
+    
+    // Initialize hardware adapters
+    Serial.println("7. Initializing adapters...");
+    rgb.begin(5, 10);  // Pin 5, 10 LEDs
     hmi.begin();
-
-    wifi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    while (!wifi.isConnected())
-    {
-        Serial.println("Connecting to WiFi...");
-        wifi.loop();
-        delay(100);
-    }
-
-    rtc.begin();
-    // rtc.setLocalTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
-
-    textAdapter.drawText("System załadowany", TextAlignX::Left, TextAlignY::Top, FontStyle::Bold, FontSize::Normal);
-
-    textAdapter.drawText("Zobacz HMI... (pokrętło)", TextAlignX::Right, TextAlignY::Center, FontStyle::Italic, FontSize::Small);
-
-    displayAdapter.update();
-
-    // Register pages
-    pageManager.registerPage(BEFORE_CONCERT, &beforeConcertPage);
-    pageManager.registerPage(OVATION, &ovationPage);
-    pageManager.registerPage(TENSION_MEASUREMENT, &tensionPage);
-    pageManager.registerPage(APP_GUIDE, &appGuidePage);
-    pageManager.registerPage(SLIDER_DEMO, &sliderDemoPage);
-    pageManager.registerPage(CONCERT_START, &concertStartPage);
-    pageManager.registerPage(PIECE_ANNOUNCEMENT, &pieceAnnouncementPage);
-    pageManager.registerPage(END_OF_CONCERT, &endOfConcertPage);
-
-    // Initialize HTTP adapter
-    httpAdapter.begin();
-
-    // Initialize MQTT after WiFi is connected
-    mqttAdapter.begin(MQTT_USERNAME, MQTT_PASSWORD);
-    mqttAdapter.subscribeTo(MQTT_TOPIC_EVENTS);
-
-    // Setup page mappings (eventType -> PageID)
-    mqttPageBridge.begin();
-    mqttPageBridge.addPageMapping("BEFORE_CONCERT", BEFORE_CONCERT);
-    mqttPageBridge.addPageMapping("OVATION", OVATION);
-    mqttPageBridge.addPageMapping("TENSION_MEASUREMENT", TENSION_MEASUREMENT);
-    mqttPageBridge.addPageMapping("APP_GUIDE", APP_GUIDE);
-    mqttPageBridge.addPageMapping("SLIDER_DEMO", SLIDER_DEMO);
-    mqttPageBridge.addPageMapping("CONCERT_START", CONCERT_START);
-    mqttPageBridge.addPageMapping("PIECE_ANNOUNCEMENT", PIECE_ANNOUNCEMENT);
-    mqttPageBridge.addPageMapping("END_OF_CONCERT", END_OF_CONCERT);
-
-    pageManager.requestPageChange(BEFORE_CONCERT); // Start on before concert page
+    Serial.println("8. Adapters initialized!");
+    
+    // Create all screens
+    Serial.println("9. Creating screens...");
+    lv_obj_t *loadingScreen = LoadingPage::create();
+    lv_obj_t *beforeConcertScreen = BeforeConcertPage::create();
+    lv_obj_t *sliderScreen = SliderDemoPage::create();
+    lv_obj_t *tensionScreen = TensionMeasurementPage::create();
+    Serial.println("10. All screens created!");
+    
+    // Register screens with navigator
+    Serial.println("11. Registering screens...");
+    navigator.registerScreen(LOADING, loadingScreen);
+    navigator.registerScreen(BEFORE_CONCERT, beforeConcertScreen);
+    navigator.registerScreen(SLIDER_DEMO, sliderScreen);
+    navigator.registerScreen(TENSION_MEASUREMENT, tensionScreen);
+    Serial.println("12. Screens registered!");
+    
+    // Show loading page initially
+    Serial.println("13. Showing LOADING page...");
+    navigator.showPage(LOADING);
+    Serial.println("14. LOADING page displayed!");
+    
+    Serial.println("================================");
+    Serial.println("=== Setup Complete ===");
+    Serial.println("Press Button A to cycle pages");
+    Serial.println("================================");
 }
 
-void loop()
-{
-    displayAdapter.waitDisplay();
-    wifi.loop();
-
-    // Non-blocking MQTT processing
-    mqttAdapter.loop();
-    mqttPageBridge.loop();
-
-    // Non-blocking HTTP processing
-    httpAdapter.loop();
-
-    pageManager.updatePageIfNeeded();
-    Page *currentPage = pageManager.getCurrentPage();
-    if (currentPage)
-    {
-        currentPage->handleInput();
-        currentPage->render();
+void loop() {
+    static unsigned long lastPrint = 0;
+    static int counter = 0;
+    
+    M5.update();
+    lv_task_handler();  // Handle LVGL tasks
+    
+    counter++;
+    if (millis() - lastPrint > 5000) {
+        Serial.printf("Loop running... counter=%d\n", counter);
+        lastPrint = millis();
     }
-    displayAdapter.update();
+    
+    // Handle HMI input for page navigation
+    static bool btnA_pressed = false;
+    static bool btnB_pressed = false;
+    
+    bool btnA = hmi.getButtonA();
+    bool btnB = hmi.getButtonB();
+    
+    // Button A: cycle through pages
+    if (btnA && !btnA_pressed) {
+        btnA_pressed = true;
+        PageID current = navigator.getCurrentPage();
+        
+        switch(current) {
+            case LOADING:
+                navigator.showPage(BEFORE_CONCERT);
+                rgb.setColor(0, 0, 255);  // Blue
+                Serial.println("-> BEFORE_CONCERT");
+                break;
+            case BEFORE_CONCERT:
+                navigator.showPage(SLIDER_DEMO);
+                rgb.setColor(0, 255, 0);  // Green
+                Serial.println("-> SLIDER_DEMO");
+                break;
+            case SLIDER_DEMO:
+                navigator.showPage(TENSION_MEASUREMENT);
+                rgb.setColor(255, 255, 0);  // Yellow
+                Serial.println("-> TENSION_MEASUREMENT");
+                break;
+            case TENSION_MEASUREMENT:
+                navigator.showPage(LOADING);
+                rgb.setColor(100, 100, 100);  // Gray
+                Serial.println("-> LOADING");
+                break;
+            default:
+                navigator.showPage(LOADING);
+                break;
+        }
+    }
+    if (!btnA) btnA_pressed = false;
+    
+    // Button B: go back to loading
+    if (btnB && !btnB_pressed) {
+        btnB_pressed = true;
+        navigator.showPage(LOADING);
+        rgb.setColor(100, 100, 100);
+        Serial.println("-> LOADING (back)");
+    }
+    if (!btnB) btnB_pressed = false;
+    
+    // Update tension page with encoder value
+    if (navigator.getCurrentPage() == TENSION_MEASUREMENT) {
+        int encoderValue = hmi.getEncoderValue();
+        if (encoderValue != lastEncoderValue) {
+            lastEncoderValue = encoderValue;
+            TensionMeasurementPage::updateValue(encoderValue);
+            
+            // Simulate buffer filling
+            tensionBufferCount++;
+            if (tensionBufferCount > 200) tensionBufferCount = 0;
+            TensionMeasurementPage::updateBuffer(tensionBufferCount, 200);
+        }
+    }
+    
+    delay(5);
 }
-
-// int encoder = hmi.getEncoderValue();
-//     bool btnA = hmi.getButtonA();
-//     bool btnB = hmi.getButtonB();
-//     bool btnS = hmi.getButtonS();
-
-//     // if btnA or btnB pressed,
-
-//     // Example: change RGB color based on encoder
-//     rgb.setColor(encoder % 255, (encoder * 2) % 255, (encoder * 3) % 255);
-
-//     // Example: display time
-//     tm timeInfo = rtc.getTime();
-//     char buf[32];
-//     sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d", timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
-//             timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
-
-//     textAdapter.drawText(buf, TextAlignX::Left, TextAlignY::Bottom, FontStyle::Normal, FontSize::Normal);
