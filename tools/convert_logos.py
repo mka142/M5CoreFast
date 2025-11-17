@@ -166,7 +166,7 @@ def main():
     
     # Generate .c file with implementations
     c_file = """// Auto-generated sponsor logos for LVGL
-#include "sponsor_logos.h"
+#include "images/sponsor_logos.h"
 
 """
     

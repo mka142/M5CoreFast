@@ -3,7 +3,7 @@
 #include <ThemeColors.h>
 
 // Include sponsor logo images (will be created below)
-#include <sponsor_logos.h>
+#include <images/sponsor_logos.h>
 
 lv_obj_t* SponsorsPage::screen = nullptr;
 

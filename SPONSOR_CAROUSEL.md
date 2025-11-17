@@ -53,7 +53,7 @@ build_src_filter =
 
 ```cpp
 #include <SponsorCarousel.h>
-#include <sponsor_logos.h>
+#include <images/sponsor_logos.h>
 
 lv_obj_t* SponsorsPage::create() {
     screen = lv_obj_create(NULL);
