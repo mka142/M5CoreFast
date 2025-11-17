@@ -138,7 +138,15 @@ void loop() {
         switch(current) {
             case LOADING:
                 navigator.showPage(BEFORE_CONCERT);
-                rgb.setColor(0, 0, 255);  // Blue
+                // Set RGB sides: purple (0x9261D5) on left, cyan (0x42B2C2) on right
+                // Assuming 10 LEDs, split them: 0-4 purple, 5-9 cyan
+                for (int i = 0; i < 5; i++) {
+                    rgb.setPixel(i, 0x42, 0xB2, 0xC2);  // Cyan
+                }
+                for (int i = 5; i < 10; i++) {
+                    rgb.setPixel(i, 0x92, 0x61, 0xD5);  // Purple
+                }
+                rgb.show();
                 Serial.println("-> BEFORE_CONCERT");
                 break;
             case BEFORE_CONCERT:
