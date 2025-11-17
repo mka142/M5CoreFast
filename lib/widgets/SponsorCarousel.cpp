@@ -166,36 +166,10 @@ void SponsorCarousel::show_next_logo() {
     // Setup fade animations
     const uint32_t fade_duration = 500; // 500ms fade
     
-    // Fade OUT current logo
-    if (current_index >= 0) {
-        lv_anim_init(&fade_out_anim);
-        lv_anim_set_var(&fade_out_anim, img_current);
-        lv_anim_set_exec_cb(&fade_out_anim, [](void *var, int32_t value) {
-            lv_obj_set_style_image_opa((lv_obj_t*)var, value, 0);
-        });
-        lv_anim_set_values(&fade_out_anim, LV_OPA_COVER, LV_OPA_TRANSP);
-        lv_anim_set_duration(&fade_out_anim, fade_duration);
-        lv_anim_set_path_cb(&fade_out_anim, lv_anim_path_ease_in_out);
-        lv_anim_start(&fade_out_anim);
-    }
-    
-    // Fade IN next logo
-    lv_anim_init(&fade_in_anim);
-    lv_anim_set_var(&fade_in_anim, img_next);
-    lv_anim_set_exec_cb(&fade_in_anim, [](void *var, int32_t value) {
-        lv_obj_set_style_image_opa((lv_obj_t*)var, value, 0);
-    });
-    lv_anim_set_values(&fade_in_anim, LV_OPA_TRANSP, LV_OPA_COVER);
-    lv_anim_set_duration(&fade_in_anim, fade_duration);
-    lv_anim_set_path_cb(&fade_in_anim, lv_anim_path_ease_in_out);
-    lv_anim_set_ready_cb(&fade_in_anim, [](lv_anim_t *a) {
-        // Swap current and next
-        lv_obj_t *temp = SponsorCarousel::img_current;
-        SponsorCarousel::img_current = SponsorCarousel::img_next;
-        SponsorCarousel::img_next = temp;
-        SponsorCarousel::animating = false;
-    });
-    lv_anim_start(&fade_in_anim);
+    // Bez animacji - po prostu zmień obraz natychmiast
+    lv_image_set_src(img_current, logos[next_index]);
+    lv_obj_set_style_image_opa(img_current, LV_OPA_COVER, 0);
+    animating = false;
     
     current_index = next_index;
 }
