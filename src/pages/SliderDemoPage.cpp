@@ -21,10 +21,14 @@ lv_obj_t* SliderDemoPage::value_label = nullptr;
 static lv_obj_t *slider_obj  = nullptr;  // Invisible slider widget (logic only)
 static lv_obj_t *knob_obj    = nullptr;  // PNG image for knob
 static lv_obj_t *scale_line  = nullptr;  // Vertical scale track
+static lv_coord_t last_y     = 0;        // Last touch Y position for delta tracking
+static bool touch_active     = false;     // Whether touch is currently active
 
 // Forward declarations
 static void update_knob_pos();
 static void create_scale(lv_obj_t *parent);
+static void touch_event_cb(lv_event_t *e);
+static void release_event_cb(lv_event_t *e);
 
 /*----------------------------------------------------------------------------*/
 /* Public API                                                                  */
@@ -41,10 +45,10 @@ lv_obj_t* SliderDemoPage::create() {
     create_scale(screen);
 
     // Create invisible slider widget for touch logic
-    // Wide hitbox (100px) improves touch accessibility
+    // Full screen width for maximum touch sensitivity
     slider_obj = lv_slider_create(screen);
     lv_obj_remove_style_all(slider_obj);
-    lv_obj_set_size(slider_obj, 100, lv_obj_get_height(scale_line));
+    lv_obj_set_size(slider_obj, 320, lv_obj_get_height(scale_line));
     lv_obj_align_to(slider_obj, scale_line, LV_ALIGN_CENTER, 0, 0);
     lv_slider_set_range(slider_obj, 1, 10);
     lv_slider_set_value(slider_obj, 5, LV_ANIM_OFF);
@@ -55,6 +59,11 @@ lv_obj_t* SliderDemoPage::create() {
     lv_obj_set_style_bg_opa(slider_obj, LV_OPA_TRANSP, 
                             LV_PART_MAIN | LV_PART_INDICATOR | LV_PART_KNOB);
     lv_obj_set_style_border_opa(slider_obj, LV_OPA_TRANSP, LV_PART_MAIN);
+    
+    // Add touch events for gesture-based control
+    lv_obj_add_event_cb(slider_obj, touch_event_cb, LV_EVENT_PRESSED, nullptr);
+    lv_obj_add_event_cb(slider_obj, touch_event_cb, LV_EVENT_PRESSING, nullptr);
+    lv_obj_add_event_cb(slider_obj, release_event_cb, LV_EVENT_RELEASED, nullptr);
 
     // Value label above scale
     value_label = lv_label_create(screen);
@@ -104,6 +113,66 @@ void SliderDemoPage::slider_event_cb(lv_event_t *e) {
 /*----------------------------------------------------------------------------*/
 /* Internal helpers                                                            */
 /*----------------------------------------------------------------------------*/
+
+/**
+ * @brief Handle touch events for immediate slider response
+ * 
+ * Responds to PRESSED and PRESSING events to:
+ * 1. Track touch delta (movement up/down from initial touch)
+ * 2. Move slider proportionally to finger movement
+ * 3. Allow control from anywhere on screen
+ */
+static void touch_event_cb(lv_event_t *e) {
+    if (!slider_obj || !scale_line) return;
+    
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev) return;
+    
+    lv_point_t point;
+    lv_indev_get_point(indev, &point);
+    
+    // Get scale dimensions
+    const lv_coord_t line_h = lv_obj_get_height(scale_line);
+    const int32_t vmin = lv_slider_get_min_value(slider_obj);
+    const int32_t vmax = lv_slider_get_max_value(slider_obj);
+    
+    if (code == LV_EVENT_PRESSED) {
+        // Initial touch - store starting position
+        last_y = point.y;
+        touch_active = true;
+    }
+    else if (code == LV_EVENT_PRESSING && touch_active) {
+        // Calculate delta from last position
+        const lv_coord_t delta_y = last_y - point.y;  // Inverted: up = positive
+        last_y = point.y;
+        
+        // Convert pixel delta to value delta
+        // Scale sensitivity: 1 pixel = (range / height) values
+        const float pixels_per_value = (float)line_h / (float)(vmax - vmin);
+        const float value_delta = (float)delta_y / pixels_per_value;
+        
+        // Get current value and apply delta
+        const int32_t current = lv_slider_get_value(slider_obj);
+        const int32_t new_value = current + (int32_t)(value_delta + 0.5f);
+        
+        // Clamp to valid range
+        const int32_t clamped = (new_value < vmin) ? vmin : (new_value > vmax) ? vmax : new_value;
+        
+        // Update slider (will trigger VALUE_CHANGED event)
+        if (clamped != current) {
+            lv_slider_set_value(slider_obj, clamped, LV_ANIM_OFF);
+        }
+    }
+}
+
+/**
+ * @brief Handle touch release event
+ */
+static void release_event_cb(lv_event_t *e) {
+    LV_UNUSED(e);
+    touch_active = false;
+}
 
 /**
  * @brief Update knob position based on slider value
