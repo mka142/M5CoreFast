@@ -1,7 +1,11 @@
 #pragma once
 
-// Page identifiers - same as original for compatibility
-enum PageID {
+// Enum for page identification
+// Add more as needed for your app
+
+enum PageID
+{
+    SPONSORS,         // Sponsor logos carousel
     BEFORE_CONCERT,
     APP_GUIDE,
     SLIDER_DEMO,
@@ -10,5 +14,6 @@ enum PageID {
     TENSION_MEASUREMENT,
     OVATION,
     END_OF_CONCERT,
-    LOADING
+    // Add more as needed
+    LOADING // Special page for loading state
 };

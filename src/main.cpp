@@ -12,10 +12,14 @@
 #include <PageID.h>
 
 // Pages
+#include "pages/SponsorsPage.h"
 #include "pages/LoadingPage.h"
 #include "pages/BeforeConcertPage.h"
 #include "pages/SliderDemoPage.h"
 #include "pages/TensionMeasurementPage.h"
+
+// Widgets
+#include <SponsorCarousel.h>
 
 // Adapters
 #include <HMIAdapter.h>
@@ -85,6 +89,7 @@ void setup() {
     
     // Create all screens
     Serial.println("9. Creating screens...");
+    lv_obj_t *sponsorsScreen = SponsorsPage::create();
     lv_obj_t *loadingScreen = LoadingPage::create();
     lv_obj_t *beforeConcertScreen = BeforeConcertPage::create();
     lv_obj_t *sliderScreen = SliderDemoPage::create();
@@ -93,16 +98,17 @@ void setup() {
     
     // Register screens with navigator
     Serial.println("11. Registering screens...");
+    navigator.registerScreen(SPONSORS, sponsorsScreen);
     navigator.registerScreen(LOADING, loadingScreen);
     navigator.registerScreen(BEFORE_CONCERT, beforeConcertScreen);
     navigator.registerScreen(SLIDER_DEMO, sliderScreen);
     navigator.registerScreen(TENSION_MEASUREMENT, tensionScreen);
     Serial.println("12. Screens registered!");
     
-    // Show loading page initially
-    Serial.println("13. Showing LOADING page...");
-    navigator.showPage(LOADING);
-    Serial.println("14. LOADING page displayed!");
+    // Show sponsors page initially
+    Serial.println("13. Showing SPONSORS page...");
+    navigator.showPage(SPONSORS);
+    Serial.println("14. SPONSORS page displayed!");
     
     Serial.println("================================");
     Serial.println("=== Setup Complete ===");
@@ -136,6 +142,11 @@ void loop() {
         PageID current = navigator.getCurrentPage();
         
         switch(current) {
+            case SPONSORS:
+                navigator.showPage(LOADING);
+                rgb.setColor(100, 100, 100);  // Gray
+                Serial.println("-> LOADING");
+                break;
             case LOADING:
                 navigator.showPage(BEFORE_CONCERT);
                 rgb.setColor(0, 0, 255);  // Blue
@@ -152,23 +163,23 @@ void loop() {
                 Serial.println("-> TENSION_MEASUREMENT");
                 break;
             case TENSION_MEASUREMENT:
-                navigator.showPage(LOADING);
-                rgb.setColor(100, 100, 100);  // Gray
-                Serial.println("-> LOADING");
+                navigator.showPage(SPONSORS);  // Wróć do sponsorów na końcu
+                rgb.setColor(255, 255, 255);  // White
+                Serial.println("-> SPONSORS (END)");
                 break;
             default:
-                navigator.showPage(LOADING);
+                navigator.showPage(SPONSORS);
                 break;
         }
     }
     if (!btnA) btnA_pressed = false;
     
-    // Button B: go back to loading
+    // Button B: go back to sponsors
     if (btnB && !btnB_pressed) {
         btnB_pressed = true;
-        navigator.showPage(LOADING);
-        rgb.setColor(100, 100, 100);
-        Serial.println("-> LOADING (back)");
+        navigator.showPage(SPONSORS);
+        rgb.setColor(255, 255, 255);
+        Serial.println("-> SPONSORS (back)");
     }
     if (!btnB) btnB_pressed = false;
     
