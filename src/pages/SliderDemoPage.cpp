@@ -13,6 +13,7 @@
 #include <polish_fonts.h>
 #include <images/fader_knob.h>
 #include <stdio.h>
+#include <math.h>
 
 // Static member initialization
 lv_obj_t* SliderDemoPage::value_label = nullptr;
@@ -21,14 +22,16 @@ lv_obj_t* SliderDemoPage::value_label = nullptr;
 static lv_obj_t *slider_obj  = nullptr;  // Invisible slider widget (logic only)
 static lv_obj_t *knob_obj    = nullptr;  // PNG image for knob
 static lv_obj_t *scale_line  = nullptr;  // Vertical scale track
-static lv_coord_t last_y     = 0;        // Last touch Y position for delta tracking
-static bool touch_active     = false;     // Whether touch is currently active
+static lv_timer_t *slider_timer = nullptr; // Timer for smooth continuous movement
+static int32_t target_value = -1;         // Target slider value (-1 = no target)
+static float current_position = 5.0f;     // Current fractional position
 
 // Forward declarations
 static void update_knob_pos();
 static void create_scale(lv_obj_t *parent);
 static void touch_event_cb(lv_event_t *e);
 static void release_event_cb(lv_event_t *e);
+static void slider_timer_cb(lv_timer_t *timer);
 
 /*----------------------------------------------------------------------------*/
 /* Public API                                                                  */
@@ -90,6 +93,13 @@ lv_obj_t* SliderDemoPage::create() {
     // Register value change callback
     lv_obj_add_event_cb(slider_obj, slider_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
+    // Create timer for smooth continuous slider movement (16ms ≈ 60 FPS)
+    slider_timer = lv_timer_create(slider_timer_cb, 16, nullptr);
+    
+    // Initialize position from current slider value
+    current_position = (float)lv_slider_get_value(slider_obj);
+    target_value = -1;
+
     return screen;
 }
 
@@ -110,60 +120,72 @@ void SliderDemoPage::slider_event_cb(lv_event_t *e) {
     update_knob_pos();
 }
 
+void SliderDemoPage::cleanup() {
+    // Pause animation timer when leaving page
+    if (slider_timer) {
+        lv_timer_pause(slider_timer);
+    }
+    
+    // Reset animation state
+    target_value = -1;
+}
+
+void SliderDemoPage::resume() {
+    // Resume animation timer when returning to page
+    if (slider_timer) {
+        lv_timer_resume(slider_timer);
+    }
+}
+
+// Global cleanup function for PageNavigator
+void sliderDemoPageCleanup() {
+    SliderDemoPage::cleanup();
+}
+
+// Global resume function for PageNavigator
+void sliderDemoPageResume() {
+    SliderDemoPage::resume();
+}
+
 /*----------------------------------------------------------------------------*/
 /* Internal helpers                                                            */
 /*----------------------------------------------------------------------------*/
 
 /**
- * @brief Handle touch events for immediate slider response
+ * @brief Handle touch events to set target position
  * 
- * Responds to PRESSED and PRESSING events to:
- * 1. Track touch delta (movement up/down from initial touch)
- * 2. Move slider proportionally to finger movement
- * 3. Allow control from anywhere on screen
+ * Maps touch Y coordinate directly to slider value, then animates smoothly to that position
  */
 static void touch_event_cb(lv_event_t *e) {
     if (!slider_obj || !scale_line) return;
     
-    lv_event_code_t code = lv_event_get_code(e);
     lv_indev_t *indev = lv_indev_active();
     if (!indev) return;
     
     lv_point_t point;
     lv_indev_get_point(indev, &point);
     
-    // Get scale dimensions
+    // Get scale position and dimensions
+    const lv_coord_t line_y = lv_obj_get_y(scale_line);
     const lv_coord_t line_h = lv_obj_get_height(scale_line);
+    const lv_coord_t top    = line_y;
+    const lv_coord_t bottom = line_y + line_h;
+    
+    // Check if touch is within vertical bounds of slider
+    if (point.y < top || point.y > bottom) return;
+    
+    // Map touch Y to slider value (inverted: top = max, bottom = min)
     const int32_t vmin = lv_slider_get_min_value(slider_obj);
     const int32_t vmax = lv_slider_get_max_value(slider_obj);
+    const float ratio = (float)(bottom - point.y) / (float)line_h;
+    const float target_pos = (float)vmin + (ratio * (float)(vmax - vmin));
     
-    if (code == LV_EVENT_PRESSED) {
-        // Initial touch - store starting position
-        last_y = point.y;
-        touch_active = true;
-    }
-    else if (code == LV_EVENT_PRESSING && touch_active) {
-        // Calculate delta from last position
-        const lv_coord_t delta_y = last_y - point.y;  // Inverted: up = positive
-        last_y = point.y;
-        
-        // Convert pixel delta to value delta
-        // Scale sensitivity: 1 pixel = (range / height) values
-        const float pixels_per_value = (float)line_h / (float)(vmax - vmin);
-        const float value_delta = (float)delta_y / pixels_per_value;
-        
-        // Get current value and apply delta
-        const int32_t current = lv_slider_get_value(slider_obj);
-        const int32_t new_value = current + (int32_t)(value_delta + 0.5f);
-        
-        // Clamp to valid range
-        const int32_t clamped = (new_value < vmin) ? vmin : (new_value > vmax) ? vmax : new_value;
-        
-        // Update slider (will trigger VALUE_CHANGED event)
-        if (clamped != current) {
-            lv_slider_set_value(slider_obj, clamped, LV_ANIM_OFF);
-        }
-    }
+    // Set target for smooth animation
+    target_value = (int32_t)(target_pos + 0.5f);
+    
+    // Clamp target to valid range
+    if (target_value < vmin) target_value = vmin;
+    if (target_value > vmax) target_value = vmax;
 }
 
 /**
@@ -171,7 +193,43 @@ static void touch_event_cb(lv_event_t *e) {
  */
 static void release_event_cb(lv_event_t *e) {
     LV_UNUSED(e);
-    touch_active = false;
+    // Keep animating to target even after release
+}
+
+/**
+ * @brief Timer callback for smooth slider animation
+ * 
+ * Called every 16ms (~60 FPS) to animate slider towards target position
+ * Uses smooth easing for natural-looking movement
+ */
+static void slider_timer_cb(lv_timer_t *timer) {
+    LV_UNUSED(timer);
+    
+    if (!slider_obj || target_value < 0) return;
+    
+    const int32_t vmin = lv_slider_get_min_value(slider_obj);
+    const int32_t vmax = lv_slider_get_max_value(slider_obj);
+    
+    // Calculate difference to target
+    const float diff = (float)target_value - current_position;
+    
+    // If close enough to target, snap to it and stop
+    if (fabsf(diff) < 0.05f) {
+        current_position = (float)target_value;
+        lv_slider_set_value(slider_obj, target_value, LV_ANIM_OFF);
+        target_value = -1;  // Stop animation
+        return;
+    }
+    
+    // Smooth easing - move 30% of remaining distance each frame
+    // Faster response for better tracking during finger movement
+    current_position += diff * 0.3f;
+    
+    // Update slider with rounded position
+    const int32_t rounded = (int32_t)(current_position + 0.5f);
+    const int32_t clamped = (rounded < vmin) ? vmin : (rounded > vmax) ? vmax : rounded;
+    
+    lv_slider_set_value(slider_obj, clamped, LV_ANIM_OFF);
 }
 
 /**

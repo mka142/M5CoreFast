@@ -38,6 +38,20 @@ public:
      */
     static void slider_event_cb(lv_event_t *e);
     
+    /**
+     * @brief Clean up resources when leaving page
+     * 
+     * Pauses animation timer to prevent interference with other pages.
+     */
+    static void cleanup();
+    
+    /**
+     * @brief Resume resources when returning to page
+     * 
+     * Resumes animation timer for smooth slider operation.
+     */
+    static void resume();
+    
 private:
     static lv_obj_t *value_label;  ///< Label displaying current slider value
 };
