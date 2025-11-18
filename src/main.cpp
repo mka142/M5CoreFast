@@ -15,10 +15,12 @@
 #include "pages/SponsorsPage.h"
 #include "pages/LoadingPage.h"
 #include "pages/BeforeConcertPage.h"
+#include "pages/AppGuidePage.h"
 #include "pages/SliderDemoPage.h"
 #include "pages/TensionMeasurementPage.h"
 #include "pages/ResearchForm/ResearchFormPage.h"
 #include "pages/ChargingPage.h"
+#include "pages/OvationPage.h"
 
 // Widgets
 #include <SponsorCarousel.h>
@@ -104,14 +106,26 @@ void setup() {
     lv_obj_t *sponsorsScreen = SponsorsPage::create();
     lv_obj_t *loadingScreen = LoadingPage::create();
     lv_obj_t *beforeConcertScreen = BeforeConcertPage::create();
+    lv_obj_t *appGuideScreen = AppGuidePage::create();
     lv_obj_t *sliderScreen = SliderDemoPage::create();
     lv_obj_t *tensionScreen = TensionMeasurementPage::create();
     lv_obj_t *researchFormScreen = ResearchFormPage::create();
     lv_obj_t *chargingScreen = ChargingPage::create();
+    lv_obj_t *ovationScreen = OvationPage::create();
     Serial.println("10. All screens created!");
     
     // Register screens with navigator
     Serial.println("11. Registering screens...");
+    navigator.registerScreen(SPONSORS, sponsorsScreen);
+    navigator.registerScreen(LOADING, loadingScreen);
+    navigator.registerScreen(BEFORE_CONCERT, beforeConcertScreen);
+    navigator.registerScreen(APP_GUIDE, appGuideScreen);
+    navigator.registerScreen(SLIDER_DEMO, sliderScreen);
+    navigator.registerScreen(TENSION_MEASUREMENT, tensionScreen);
+    navigator.registerScreen(BEFORE_CONCERT__RESEARCH_FORM, researchFormScreen);
+    navigator.registerScreen(CHARGING, chargingScreen);
+    navigator.registerScreen(OVATION, ovationScreen);
+    Serial.println("12. Screens registered!");
     navigator.registerScreen(SPONSORS, sponsorsScreen);
     navigator.registerScreen(LOADING, loadingScreen);
 
@@ -240,9 +254,14 @@ void loop() {
             rgb.setColor(0, 0, 0);
             switch(current) {
                  case LOADING:
+                    navigator.showPage(APP_GUIDE);
+                    rgb.setColor(50, 50, 150);  // Blue tint
+                    Serial.println("-> APP_GUIDE");
+                    break;
+                case APP_GUIDE:
                     navigator.showPage(BEFORE_CONCERT);
                     // Set RGB sides: purple (0x9261D5) on left, cyan (0x42B2C2) on right
-                    // Assuming 10 LEDs, split them: 0-4 purple, 5-9 cyan
+                    // Assuming 10 LEDs, split them: 0-4 cyan, 5-9 purple
                     for (int i = 0; i < 5; i++) {
                         rgb.setPixel(i, 0x42, 0xB2, 0xC2);  // Cyan
                     }
@@ -268,6 +287,11 @@ void loop() {
                     Serial.println("-> TENSION_MEASUREMENT");
                     break;
                 case TENSION_MEASUREMENT:
+                    navigator.showPage(OVATION);
+                    rgb.setColor(0, 0, 0);  // Off during ovation
+                    Serial.println("-> OVATION");
+                    break;
+                case OVATION:
                     navigator.showPage(SPONSORS);
                     Serial.println("-> SPONSORS");
                     break;
