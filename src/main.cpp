@@ -236,13 +236,10 @@ void loop() {
         btnA_pressed = true;
         PageID current = navigator.getCurrentPage();
             // Normal page cycling
+            // set rgb off
+            rgb.setColor(0, 0, 0);
             switch(current) {
-                case SPONSORS:
-                    navigator.showPage(LOADING);
-                    rgb.setColor(100, 100, 100);  // Gray
-                    Serial.println("-> LOADING");
-                    break;
-                case LOADING:
+                 case LOADING:
                     navigator.showPage(BEFORE_CONCERT);
                     // Set RGB sides: purple (0x9261D5) on left, cyan (0x42B2C2) on right
                     // Assuming 10 LEDs, split them: 0-4 purple, 5-9 cyan
@@ -255,26 +252,28 @@ void loop() {
                     rgb.show();
                     Serial.println("-> BEFORE_CONCERT");
                     break;
+                case SPONSORS:
+                    navigator.showPage(LOADING);
+                    rgb.setColor(100, 100, 100);  // Gray
+                    Serial.println("-> LOADING");
+                    break;
+               
                 case BEFORE_CONCERT:
                     // Don't auto-navigate - user clicks button to go to RESEARCH_FORM
                     navigator.showPage(SLIDER_DEMO);
-                    rgb.setColor(0, 255, 0);  // Green
                     Serial.println("-> SLIDER_DEMO (for testing)");
                     break;
                 case SLIDER_DEMO:
                     navigator.showPage(TENSION_MEASUREMENT);
-                    rgb.setColor(255, 255, 0);  // Yellow
                     Serial.println("-> TENSION_MEASUREMENT");
                     break;
                 case TENSION_MEASUREMENT:
                     navigator.showPage(SPONSORS);
-                    rgb.setColor(255, 255, 255);  // White
                     Serial.println("-> SPONSORS");
                     break;
                 case BEFORE_CONCERT__RESEARCH_FORM:
                     // Research form navigates back to BEFORE_CONCERT via its submit button
                     navigator.showPage(BEFORE_CONCERT);
-                    rgb.setColor(200, 200, 255);  // Light blue
                     Serial.println("-> BEFORE_CONCERT (from form)");
                     break;
                 default:
