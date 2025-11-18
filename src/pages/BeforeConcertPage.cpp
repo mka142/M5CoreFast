@@ -1,8 +1,14 @@
 #include "BeforeConcertPage.h"
 #include <polish_fonts.h>
+#include <PageID.h>
+#include <PageNavigator.h>
+#include <Arduino.h>
 
 // Declare external image
 LV_IMG_DECLARE(note);
+
+// External page navigator reference (defined in main.cpp)
+extern PageNavigator navigator;
 
 // Static member initialization
 lv_obj_t* BeforeConcertPage::screen = nullptr;
@@ -32,10 +38,7 @@ const char* BeforeConcertPage::header_texts[] = {
 const int BeforeConcertPage::header_texts_count = 11;
 
 // Rotation increments: always move clockwise (right)
-// Original sequence was: 30°, 330°, 60°, 300°, 90°, 270°, 120°, 240°, 360°(0°)
-// To go continuously clockwise, we calculate the shortest forward path:
-// 0→30: +30, 30→330: +300, 330→60: +90 (via 360), 60→300: +240, 300→90: +150 (via 360)
-// 90→270: +180, 270→120: +210 (via 360), 120→240: +120, 240→360: +120
+// Clockwise sequence forward: 30°, 330°, 60°, 300°, 90°, 270°, 120°, 240°, 360°(0°)
 const int BeforeConcertPage::rotation_increments[] = {
     300,   // +30° (0.1° units)
     3300,  // +330°
@@ -97,6 +100,9 @@ lv_obj_t* BeforeConcertPage::create() {
     lv_obj_set_style_text_color(button_label, lv_color_hex(COLOR_WHITE), 0);
     lv_obj_set_style_text_font(button_label, &montserrat_20_polish, 0);
     lv_obj_center(button_label);
+    
+    // Add button click event handler
+    lv_obj_add_event_cb(button, on_form_button_clicked, LV_EVENT_CLICKED, NULL);
     
     // Start rotation animation timer (1500ms per step for slower rotation)
     lv_timer_create(update_rotation, 2000, NULL);
@@ -169,6 +175,11 @@ void BeforeConcertPage::update_text(lv_timer_t *timer) {
         });
         lv_anim_start(&text_anim);
     }
+}
+
+void BeforeConcertPage::on_form_button_clicked(lv_event_t *e) {
+    Serial.println("Form button clicked - navigating to BEFORE_CONCERT__RESEARCH_FORM");
+    //navigator.showPage(BEFORE_CONCERT__RESEARCH_FORM);
 }
 
 void BeforeConcertPage::cleanup() {

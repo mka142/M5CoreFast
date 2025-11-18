@@ -8,6 +8,9 @@ public:
     static lv_obj_t* create();
     static void cleanup();
     
+    // Button callback
+    static void on_form_button_clicked(lv_event_t *e);
+    
     // Animation callbacks
     static void update_rotation(lv_timer_t *timer);
     static void update_text(lv_timer_t *timer);
