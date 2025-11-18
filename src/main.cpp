@@ -17,6 +17,8 @@
 #include "pages/BeforeConcertPage.h"
 #include "pages/SliderDemoPage.h"
 #include "pages/TensionMeasurementPage.h"
+#include "pages/ResearchForm/ResearchFormPage.h"
+#include "pages/ChargingPage.h"
 
 // Widgets
 #include <SponsorCarousel.h>
@@ -29,6 +31,9 @@
 constexpr int32_t HOR_RES = 320;
 constexpr int32_t VER_RES = 240;
 
+// Feature flags
+constexpr bool SHOW_CHARGING = true;  // Set to false to disable charging screen
+
 // Global objects
 PageNavigator navigator;
 HMIAdapter hmi;
@@ -37,6 +42,11 @@ RGBAdapter rgb;
 // Current encoder value for UI updates
 int lastEncoderValue = 0;
 int tensionBufferCount = 0;
+
+// Charging state tracking
+bool was_charging = false;
+PageID page_before_charging = LOADING;
+unsigned long last_battery_update = 0;
 
 // Touch input for LVGL
 void touchpad_read(lv_indev_t *drv, lv_indev_data_t *data) {
@@ -84,9 +94,11 @@ void setup() {
     // Initialize hardware adapters
     Serial.println("7. Initializing adapters...");
     rgb.begin(5, 10);  // Pin 5, 10 LEDs
+    rgb.setColor(0, 0, 0);  // Start with RGB off
     hmi.begin();
     Serial.println("8. Adapters initialized!");
-    
+
+    // ==================== SETUP SCREENS ====================
     // Create all screens
     Serial.println("9. Creating screens...");
     lv_obj_t *sponsorsScreen = SponsorsPage::create();
@@ -94,21 +106,42 @@ void setup() {
     lv_obj_t *beforeConcertScreen = BeforeConcertPage::create();
     lv_obj_t *sliderScreen = SliderDemoPage::create();
     lv_obj_t *tensionScreen = TensionMeasurementPage::create();
+    lv_obj_t *researchFormScreen = ResearchFormPage::create();
+    lv_obj_t *chargingScreen = ChargingPage::create();
     Serial.println("10. All screens created!");
     
     // Register screens with navigator
     Serial.println("11. Registering screens...");
     navigator.registerScreen(SPONSORS, sponsorsScreen);
     navigator.registerScreen(LOADING, loadingScreen);
+
     navigator.registerScreen(BEFORE_CONCERT, beforeConcertScreen);
+    navigator.registerScreen(BEFORE_CONCERT__RESEARCH_FORM, researchFormScreen);
+
     navigator.registerScreen(SLIDER_DEMO, sliderScreen);
     navigator.registerScreen(TENSION_MEASUREMENT, tensionScreen);
+
+    // Internal charging screen
+    navigator.registerScreen(CHARGING, chargingScreen);
     Serial.println("12. Screens registered!");
     
-    // Show sponsors page initially
-    Serial.println("13. Showing SPONSORS page...");
-    navigator.showPage(SPONSORS);
-    Serial.println("14. SPONSORS page displayed!");
+
+    // ==================== CHARGING LOGIC SETUP ====================
+    // Check if device is charging at startup (only if SHOW_CHARGING is enabled)
+    bool is_charging = SHOW_CHARGING && M5.Power.isCharging();
+    if (is_charging) {
+        Serial.println("13. Device is charging - showing CHARGING page...");
+        navigator.showPage(CHARGING);
+        // Turn off RGB
+        rgb.setColor(0, 0, 0);
+        was_charging = true;
+        Serial.println("14. CHARGING page displayed!");
+    } else {
+        // Show sponsors page initially
+        Serial.println("13. Showing SPONSORS page...");
+        navigator.showPage(SPONSORS);
+        Serial.println("14. SPONSORS page displayed!");
+    }
     
     Serial.println("================================");
     Serial.println("=== Setup Complete ===");
@@ -129,6 +162,55 @@ void loop() {
         lastPrint = millis();
     }
     
+    // ==================== CHARGING LOGIC LOOP ====================
+    if (SHOW_CHARGING) {
+        bool is_charging = M5.Power.isCharging();
+        
+        // If charging state changed to charging, switch to charging page
+        if (is_charging && !was_charging) {
+            Serial.println("Device started charging - showing CHARGING page");
+            page_before_charging = navigator.getCurrentPage();
+            navigator.showPage(CHARGING);
+            rgb.setColor(0, 0, 0);  // Turn off RGB
+            was_charging = true;
+        }
+        // If unplugged from charging, return to previous page
+        else if (!is_charging && was_charging) {
+            Serial.println("Device unplugged - returning to previous page");
+            navigator.showPage(page_before_charging);
+            was_charging = false;
+        }
+        
+        // Update battery display every 2 seconds when on charging page
+        if (navigator.getCurrentPage() == CHARGING) {
+            if (millis() - last_battery_update > 2000) {
+                ChargingPage::update_battery_status();
+                last_battery_update = millis();
+            }
+            
+
+            // ======== JUST FOR TESTING PURPOSES - DISMISS CHARGING WITH BUTTON A ========
+            // // While on charging screen, ignore all other input except dismissal
+            // // Check for touch/button to dismiss charging screen
+            // static bool btnA_pressed_charging = false;
+            // bool btnA = hmi.getButtonA();
+            
+            // if (btnA && !btnA_pressed_charging) {
+            //     btnA_pressed_charging = true;
+            //     Serial.println("Charging screen dismissed - returning to previous page");
+            //     navigator.showPage(page_before_charging);
+            //     was_charging = false;  // Prevent auto-return to charging
+            // }
+            // if (!btnA) btnA_pressed_charging = false;
+            // ======== END TESTING CODE ===================================================
+            
+            // Early return - skip rest of loop while on charging screen
+            delay(5);
+            return;
+        }
+    }
+    
+    // ==================== NORMAL OPERATION ====================
     // Handle HMI input for page navigation
     static bool btnA_pressed = false;
     static bool btnB_pressed = false;
@@ -140,45 +222,52 @@ void loop() {
     if (btnA && !btnA_pressed) {
         btnA_pressed = true;
         PageID current = navigator.getCurrentPage();
-        
-        switch(current) {
-            case SPONSORS:
-                navigator.showPage(LOADING);
-                rgb.setColor(100, 100, 100);  // Gray
-                Serial.println("-> LOADING");
-                break;
-            case LOADING:
-                navigator.showPage(BEFORE_CONCERT);
-                // Set RGB sides: purple (0x9261D5) on left, cyan (0x42B2C2) on right
-                // Assuming 10 LEDs, split them: 0-4 purple, 5-9 cyan
-                for (int i = 0; i < 5; i++) {
-                    rgb.setPixel(i, 0x42, 0xB2, 0xC2);  // Cyan
-                }
-                for (int i = 5; i < 10; i++) {
-                    rgb.setPixel(i, 0x92, 0x61, 0xD5);  // Purple
-                }
-                rgb.show();
-                Serial.println("-> BEFORE_CONCERT");
-                break;
-            case BEFORE_CONCERT:
-                navigator.showPage(SLIDER_DEMO);
-                rgb.setColor(0, 255, 0);  // Green
-                Serial.println("-> SLIDER_DEMO");
-                break;
-            case SLIDER_DEMO:
-                navigator.showPage(TENSION_MEASUREMENT);
-                rgb.setColor(255, 255, 0);  // Yellow
-                Serial.println("-> TENSION_MEASUREMENT");
-                break;
-            case TENSION_MEASUREMENT:
-                navigator.showPage(SPONSORS);  // Wróć do sponsorów na końcu
-                rgb.setColor(255, 255, 255);  // White
-                Serial.println("-> SPONSORS (END)");
-                break;
-            default:
-                navigator.showPage(SPONSORS);
-                break;
-        }
+            // Normal page cycling
+            switch(current) {
+                case SPONSORS:
+                    navigator.showPage(LOADING);
+                    rgb.setColor(100, 100, 100);  // Gray
+                    Serial.println("-> LOADING");
+                    break;
+                case LOADING:
+                    navigator.showPage(BEFORE_CONCERT);
+                    // Set RGB sides: purple (0x9261D5) on left, cyan (0x42B2C2) on right
+                    // Assuming 10 LEDs, split them: 0-4 purple, 5-9 cyan
+                    for (int i = 0; i < 5; i++) {
+                        rgb.setPixel(i, 0x42, 0xB2, 0xC2);  // Cyan
+                    }
+                    for (int i = 5; i < 10; i++) {
+                        rgb.setPixel(i, 0x92, 0x61, 0xD5);  // Purple
+                    }
+                    rgb.show();
+                    Serial.println("-> BEFORE_CONCERT");
+                    break;
+                case BEFORE_CONCERT:
+                    // Don't auto-navigate - user clicks button to go to RESEARCH_FORM
+                    navigator.showPage(SLIDER_DEMO);
+                    rgb.setColor(0, 255, 0);  // Green
+                    Serial.println("-> SLIDER_DEMO (for testing)");
+                    break;
+                case SLIDER_DEMO:
+                    navigator.showPage(TENSION_MEASUREMENT);
+                    rgb.setColor(255, 255, 0);  // Yellow
+                    Serial.println("-> TENSION_MEASUREMENT");
+                    break;
+                case TENSION_MEASUREMENT:
+                    navigator.showPage(SPONSORS);
+                    rgb.setColor(255, 255, 255);  // White
+                    Serial.println("-> SPONSORS");
+                    break;
+                case BEFORE_CONCERT__RESEARCH_FORM:
+                    // Research form navigates back to BEFORE_CONCERT via its submit button
+                    navigator.showPage(BEFORE_CONCERT);
+                    rgb.setColor(200, 200, 255);  // Light blue
+                    Serial.println("-> BEFORE_CONCERT (from form)");
+                    break;
+                default:
+                    navigator.showPage(SPONSORS);
+                    break;
+            }
     }
     if (!btnA) btnA_pressed = false;
     
