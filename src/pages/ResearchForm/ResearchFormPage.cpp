@@ -370,9 +370,10 @@ void ResearchFormPage::on_submit_clicked(lv_event_t *e) {
     // TODO: Send JSON via HTTP/MQTT
     
     // Navigate back to BEFORE_CONCERT page
-    // Serial.println("Navigating back to BEFORE_CONCERT");
-    // navigator.showPage(BEFORE_CONCERT);
+    Serial.println("Navigating back to BEFORE_CONCERT");
+    navigator.showPage(BEFORE_CONCERT);
 }
+
 void ResearchFormPage::on_dropdown_changed(lv_event_t *e) {
     lv_obj_t *checkbox = (lv_obj_t*)lv_event_get_target(e);
     int option_index = (int)(intptr_t)lv_event_get_user_data(e);

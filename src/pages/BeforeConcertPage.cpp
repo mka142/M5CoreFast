@@ -179,7 +179,7 @@ void BeforeConcertPage::update_text(lv_timer_t *timer) {
 
 void BeforeConcertPage::on_form_button_clicked(lv_event_t *e) {
     Serial.println("Form button clicked - navigating to BEFORE_CONCERT__RESEARCH_FORM");
-    //navigator.showPage(BEFORE_CONCERT__RESEARCH_FORM);
+    navigator.showPage(BEFORE_CONCERT__RESEARCH_FORM);
 }
 
 void BeforeConcertPage::cleanup() {
