@@ -156,9 +156,22 @@ void loop() {
     M5.update();
     lv_task_handler();  // Handle LVGL tasks
     
+
+    // ==================== DEBUG MEMORY LOGGING ====================
     counter++;
     if (millis() - lastPrint > 5000) {
+        // Get memory information
+        size_t free_heap = ESP.getFreeHeap();
+        size_t total_heap = ESP.getHeapSize();
+        size_t used_heap = total_heap - free_heap;
+        size_t free_psram = ESP.getFreePsram();
+        size_t total_psram = ESP.getPsramSize();
+        size_t used_psram = total_psram - free_psram;
+        
         Serial.printf("Loop running... counter=%d\n", counter);
+        Serial.printf("Memory - Heap: %d/%d KB (%.1f%% used), PSRAM: %d/%d KB (%.1f%% used)\n",
+                     used_heap / 1024, total_heap / 1024, (used_heap * 100.0f) / total_heap,
+                     used_psram / 1024, total_psram / 1024, (used_psram * 100.0f) / total_psram);
         lastPrint = millis();
     }
     
@@ -293,6 +306,8 @@ void loop() {
             TensionMeasurementPage::updateBuffer(tensionBufferCount, 200);
         }
     }
-    
+
+
+    // Small delay to avoid busy looping
     delay(5);
 }
