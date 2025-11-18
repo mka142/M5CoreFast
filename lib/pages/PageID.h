@@ -14,6 +14,8 @@ enum PageID
     TENSION_MEASUREMENT,
     OVATION,
     END_OF_CONCERT,
+    BEFORE_CONCERT__RESEARCH_FORM,    // Research form (sub-page of BEFORE_CONCERT)
+    CHARGING,         // Internal charging screen (auto-displayed when charging)
     // Add more as needed
     LOADING // Special page for loading state
 };
