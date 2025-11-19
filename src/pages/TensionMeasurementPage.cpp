@@ -3,6 +3,10 @@
 #include <polish_fonts.h>
 #include <stdio.h>
 #include <cmath>
+#include <RGBAdapter.h>
+
+// Access the global RGB adapter instance declared in main.cpp
+extern RGBAdapter rgb;
 
 lv_obj_t* TensionMeasurementPage::bar_obj = nullptr;
 lv_obj_t* TensionMeasurementPage::center_line = nullptr;
@@ -15,6 +19,7 @@ float TensionMeasurementPage::velocity = 0.0f;
 float TensionMeasurementPage::wave_amplitude = 0.0f;
 float TensionMeasurementPage::wave_phase = 0.0f;
 lv_timer_t* TensionMeasurementPage::momentum_timer = nullptr;
+float TensionMeasurementPage::breakaway_accumulator = 0.0f;
 
 lv_obj_t* TensionMeasurementPage::create() {
     // Create screen - czarne tło
@@ -25,9 +30,8 @@ lv_obj_t* TensionMeasurementPage::create() {
     static lv_style_t style_indic;
     lv_style_init(&style_indic);
     lv_style_set_bg_opa(&style_indic, LV_OPA_COVER);
-    lv_style_set_bg_color(&style_indic, lv_color_hex(0x404040)); // Ciemny szary
-    lv_style_set_bg_grad_color(&style_indic, lv_color_hex(0xC0C0C0)); // Jasny szary
-    lv_style_set_bg_grad_dir(&style_indic, LV_GRAD_DIR_VER);
+    // Use a single flat indicator color (disable gradient for clearer weight perception)
+    lv_style_set_bg_color(&style_indic, lv_color_hex(0x505050)); // Flat mid gray
     lv_style_set_radius(&style_indic, 0); // No rounding for indicator
 
     static lv_style_t style_main;
@@ -42,10 +46,10 @@ lv_obj_t* TensionMeasurementPage::create() {
     lv_obj_add_style(bar, &style_indic, LV_PART_INDICATOR);
 
     // Increase width by 20% on each side -> total width *= 1.4
-    lv_obj_set_size(bar, 168, 200); // was 120, now ~168
+    lv_obj_set_size(bar, 168, 200); // width x height (visual unchanged)
     lv_obj_center(bar);
-    // Visual / logical range: 0..100
-    lv_bar_set_range(bar, 0, 100);
+    // Visual / logical range: use 0..300 for high internal resolution
+    lv_bar_set_range(bar, 0, 300);
     lv_bar_set_value(bar, 0, LV_ANIM_OFF);
     bar_obj = bar;
 
@@ -55,12 +59,17 @@ lv_obj_t* TensionMeasurementPage::create() {
     const int bar_h = 200;
     const int pad = 12; // keep labels inside bar bounds
     const int eff_h = bar_h - (pad * 2);
-    for (int v = 0; v <= 100; v += 20) {
+    // Labels for 0,40,80,120,160,200 to match 0..200 range (6 labels)
+           // Labels for 0,60,120,180,240,300 to match 0..300 range (6 labels), displayed as 0..10
+           for (int v = 0; v <= 300; v += 60) {
         // y offset relative to center inside the padded area
-        int y_pos = (int)(((100 - v) / 100.0f) * eff_h - (eff_h / 2));
+            int y_pos = (int)(((300 - v) / 300.0f) * eff_h - (eff_h / 2));
 
-        char label_text[5];
-        snprintf(label_text, sizeof(label_text), "%d", v);
+        char label_text[8];
+        // Map 0..200 -> 0..10 for displayed labels (0,2,4,6,8,10)
+            // Map 0..300 -> 0..10 for displayed labels (0,2,4,6,8,10)
+            int disp = v / 30; // 0..10
+        snprintf(label_text, sizeof(label_text), "%d", disp);
 
         scale_labels[label_idx] = lv_label_create(screen);
         lv_label_set_text(scale_labels[label_idx], label_text);
@@ -122,8 +131,25 @@ void TensionMeasurementPage::handleEncoder(int delta) {
     if (movement > MAX_STEP_PER_TICK) movement = MAX_STEP_PER_TICK;
     if (movement < -MAX_STEP_PER_TICK) movement = -MAX_STEP_PER_TICK;
 
-    // Add to velocity for momentum effect
-    velocity += movement;
+    // Velocity ingestion with optional breakaway accumulation.
+    // If BREAKAWAY_THRESHOLD is zero, skip accumulation and start moving immediately.
+    if (BREAKAWAY_THRESHOLD > 0.0f && fabs(velocity) < VELOCITY_THRESHOLD) {
+        // accumulate small movements until the threshold is reached
+        breakaway_accumulator += movement;
+        if (fabs(breakaway_accumulator) < BREAKAWAY_THRESHOLD) {
+            // small visual ripple only
+            wave_amplitude = fabs(breakaway_accumulator) * 0.25f;
+            return;
+        } else {
+            // Apply accumulated force through smoothing and clear accumulator
+            float applied = breakaway_accumulator;
+            velocity = velocity * VELOCITY_SMOOTHING + applied * (1.0f - VELOCITY_SMOOTHING);
+            breakaway_accumulator = 0.0f;
+        }
+    } else {
+        // Normal path: apply movement into velocity using low-pass smoothing
+        velocity = velocity * VELOCITY_SMOOTHING + movement * (1.0f - VELOCITY_SMOOTHING);
+    }
 
     // Throttled debug (kept minimal)
     static unsigned long last_dbg = 0;
@@ -132,34 +158,53 @@ void TensionMeasurementPage::handleEncoder(int delta) {
         last_dbg = millis();
     }
 
-    // Create wave ripple effect - amplitude proportional to velocity
-    wave_amplitude = fabs(velocity) * 0.5f;  // Scale down for visual effect
-    if (wave_amplitude > 10.0f) wave_amplitude = 10.0f;  // Cap at 10px
+    // Create subtle wave ripple effect - keep it small so "weight" feels clearer
+    wave_amplitude = fabs(velocity) * 0.35f;  // smaller visual ripple
+    if (wave_amplitude > 6.0f) wave_amplitude = 6.0f;  // Cap at 6px
 
-    // Update position immediately
+    // Update position immediately (current_position in 0..200 now)
+    // Update position immediately (internal range 0..300)
     current_position += movement;
 
-    // Clamp to 0..100 range
+    // Clamp to 0..300 range
     if (current_position < 0.0f) {
         current_position = 0.0f;
         velocity = 0.0f;  // Stop at boundary
     }
-    if (current_position > 100.0f) {
-        current_position = 100.0f;
+    if (current_position > 300.0f) {
+        current_position = 300.0f;
         velocity = 0.0f;  // Stop at boundary
     }
 
     // Immediately reflect the manual adjustment without LVGL animation for responsiveness
     if (bar_obj) {
         int bar_value = (int)(current_position + 0.5f);
+        // Reflect manual adjustment immediately for responsive feel
         lv_bar_set_value(bar_obj, bar_value, LV_ANIM_OFF);
+
+        // Very slight RGB lighting: target color #42b2c2 (66,178,194)
+        // Max brightness set to 5% (0.05). Scale linearly with current_position (0..300).
+        float pos_frac = current_position / 300.0f; // 0..1
+        float max_brightness = 0.05f; // 5%
+        float brightness = pos_frac * max_brightness; // 0..0.05
+        if (brightness <= 0.0005f) {
+            // effectively off for very small values
+            rgb.setColor(0, 0, 0);
+        } else {
+            uint8_t r = (uint8_t)roundf(66.0f * brightness);
+            uint8_t g = (uint8_t)roundf(178.0f * brightness);
+            uint8_t b = (uint8_t)roundf(194.0f * brightness);
+            rgb.setColor(r, g, b);
+        }
 
         // numeric readout removed (user requested)
 
-        // Update scale label colors (0,20,40,60,80,100)
+        // Update scale label colors based on DISPLAYED value (0..10),
+        // so label coloring stays consistent when internal scale changes.
+        int disp_value = (int)(current_position / (300.0f / 10.0f) + 0.5f); // 0..10
         for (int i = 0; i < 6; i++) {
-            int label_value = i * 20; // 0,20,40,60,80,100
-            if (bar_value >= label_value) {
+            int label_display = i * 2; // 0,2,4,6,8,10
+            if (disp_value >= label_display) {
                 lv_obj_set_style_text_color(scale_labels[i], lv_color_hex(0xFFFFFF), 0);
             } else {
                 lv_obj_set_style_text_color(scale_labels[i], lv_color_hex(0x404040), 0);
@@ -167,6 +212,8 @@ void TensionMeasurementPage::handleEncoder(int delta) {
         }
     }
 }
+
+// Short encoder-driven animation was removed per user request to restore previous behavior
 
 void TensionMeasurementPage::momentumTimerCallback(lv_timer_t *timer) {
     // Apply momentum decay
@@ -183,8 +230,8 @@ void TensionMeasurementPage::momentumTimerCallback(lv_timer_t *timer) {
             current_position = 0.0f;
             velocity = 0.0f;
         }
-        if (current_position > 100.0f) {
-            current_position = 100.0f;
+        if (current_position > 300.0f) {
+            current_position = 300.0f;
             velocity = 0.0f;
         }
 
@@ -198,17 +245,33 @@ void TensionMeasurementPage::momentumTimerCallback(lv_timer_t *timer) {
 void TensionMeasurementPage::updateDisplay() {
     if (!bar_obj) return;
 
-    int bar_value = (int)(current_position + 0.5f);  // Round to nearest int (0..100)
+    int bar_value = (int)(current_position + 0.5f);  // Round to nearest int (0..300)
+    // Use LVGL animation for momentum-driven updates to keep coasting smooth
     lv_bar_set_value(bar_obj, bar_value, LV_ANIM_ON);
+
+    // Update RGB lighting subtly based on position -> target color #42b2c2
+    float pos_frac = current_position / 300.0f; // 0..1
+    float max_brightness = 0.05f; // 5%
+    float brightness = pos_frac * max_brightness; // 0..0.05
+    if (brightness <= 0.0005f) {
+        rgb.setColor(0, 0, 0);
+    } else {
+        uint8_t r = (uint8_t)roundf(66.0f * brightness);
+        uint8_t g = (uint8_t)roundf(178.0f * brightness);
+        uint8_t b = (uint8_t)roundf(194.0f * brightness);
+        rgb.setColor(r, g, b);
+    }
 
     // Usunięcie łuku - bar ma zaokrągloną górną krawędź
     // Gradientowa kurtyna: blendowanie cyfr przez pionowy gradient opacity
     // (realizowane przez styl bara LVGL)
 
-    // Blendowanie cyfr przez szarą kurtynę (labels at 0,20,40,60,80,100)
+    // Blendowanie cyfr przez szarą kurtynę: colorujemy według WARSTWY WYŚWIETLANEJ (0..10),
+    // aby synchronizacja etykiet nie zależała bezpośrednio od wewnętrznej skali paska.
+    int disp_value = (int)(current_position / (300.0f / 10.0f) + 0.5f); // 0..10
     for (int i = 0; i < 6; i++) {
-        int label_value = i * 20;  // 0,20,40,60,80,100
-        if (bar_value >= label_value) {
+        int label_display = i * 2; // 0,2,4,6,8,10
+        if (disp_value >= label_display) {
             lv_obj_set_style_text_color(scale_labels[i], lv_color_hex(0xFFFFFF), 0);
         } else {
             lv_obj_set_style_text_color(scale_labels[i], lv_color_hex(0x404040), 0);
@@ -222,7 +285,7 @@ void TensionMeasurementPage::updateValue(int value) {
     // Legacy method - now using handleEncoder for direct control
     current_position = (float)value;
     if (current_position < 0.0f) current_position = 0.0f;
-    if (current_position > 100.0f) current_position = 100.0f;
+    if (current_position > 300.0f) current_position = 300.0f;
     updateDisplay();
 }
 
