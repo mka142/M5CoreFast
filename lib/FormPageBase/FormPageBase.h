@@ -12,16 +12,16 @@ struct Question {
 
 class FormPageBase {
 protected:
-    // UI elements
-    static lv_obj_t* screen;
-    static lv_obj_t* scroll_container;
-    static lv_obj_t* back_btn;
-    static lv_obj_t* next_btn;
+    // UI elements (instance members - each form has its own)
+    lv_obj_t* screen;
+    lv_obj_t* scroll_container;
+    lv_obj_t* back_btn;
+    lv_obj_t* next_btn;
     
-    // Form state
-    static int current_page;
-    static int total_pages;
-    static int* answers;  // Dynamic array
+    // Form state (instance members - each form has its own)
+    int current_page;
+    int total_pages;
+    int* answers;  // Dynamic array
     
     // Abstract methods to be implemented by derived classes
     virtual void create_intro_screen() = 0;

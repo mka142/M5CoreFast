@@ -2,16 +2,11 @@
 #include <polish_fonts.h>
 #include <ThemeColors.h>
 
-// Static member initialization
-lv_obj_t* FormPageBase::screen = nullptr;
-lv_obj_t* FormPageBase::scroll_container = nullptr;
-lv_obj_t* FormPageBase::back_btn = nullptr;
-lv_obj_t* FormPageBase::next_btn = nullptr;
-int FormPageBase::current_page = 0;
-int FormPageBase::total_pages = 0;
-int* FormPageBase::answers = nullptr;
+// No static member initialization needed anymore - they're instance members now
 
-FormPageBase::FormPageBase() {}
+FormPageBase::FormPageBase() 
+    : screen(nullptr), scroll_container(nullptr), back_btn(nullptr), next_btn(nullptr),
+      current_page(0), total_pages(0), answers(nullptr) {}
 
 FormPageBase::~FormPageBase() {
     if (answers) {
@@ -72,6 +67,9 @@ lv_obj_t* FormPageBase::create_base(int total_page_count) {
     lv_obj_set_style_text_color(next_label, lv_color_hex(COLOR_WHITE), 0);
     lv_obj_center(next_label);
     
+    // Store form instance pointer in screen's user_data for access in callbacks
+    lv_obj_set_user_data(screen, this);
+    
     // Show intro screen first
     create_intro_screen();
     
@@ -82,12 +80,19 @@ lv_obj_t* FormPageBase::create_base(int total_page_count) {
 }
 
 void FormPageBase::create_form_screen() {
+    Serial.printf("[FormPageBase] create_form_screen called for page %d\n", current_page);
+    
     // Clear scroll container
     lv_obj_clean(scroll_container);
     
     // Get question data for current page
+    Serial.println("[FormPageBase] Calling get_question...");
     Question *question = get_question(current_page);
-    if (!question) return;
+    if (!question) {
+        Serial.println("[FormPageBase] ERROR: get_question returned nullptr!");
+        return;
+    }
+    Serial.printf("[FormPageBase] Got question: %s\n", question->text);
     
     const char *header_text = get_section_header(current_page);
     
@@ -182,10 +187,10 @@ void FormPageBase::update_button_states() {
 void FormPageBase::on_back_clicked(lv_event_t *e) {
     FormPageBase* form = (FormPageBase*)lv_event_get_user_data(e);
     
-    if (current_page > 0) {
-        current_page--;
+    if (form->current_page > 0) {
+        form->current_page--;
         
-        if (current_page == 0) {
+        if (form->current_page == 0) {
             form->create_intro_screen();
         } else {
             form->create_form_screen();
@@ -198,16 +203,21 @@ void FormPageBase::on_back_clicked(lv_event_t *e) {
 void FormPageBase::on_next_clicked(lv_event_t *e) {
     FormPageBase* form = (FormPageBase*)lv_event_get_user_data(e);
     
-    if (current_page < total_pages - 1) {
-        current_page++;
+    Serial.printf("[FormPageBase] on_next_clicked: current_page=%d, total_pages=%d\n", form->current_page, form->total_pages);
+    
+    if (form->current_page < form->total_pages - 1) {
+        form->current_page++;
+        Serial.printf("[FormPageBase] Incremented to page %d\n", form->current_page);
         
-        if (current_page >= 1) {
+        if (form->current_page >= 1) {
+            Serial.println("[FormPageBase] Calling create_form_screen...");
             form->create_form_screen();
         }
         
         form->update_button_states();
     } else {
         // Submit form
+        Serial.println("[FormPageBase] Submitting form...");
         form->on_form_submit();
     }
 }
@@ -215,6 +225,15 @@ void FormPageBase::on_next_clicked(lv_event_t *e) {
 void FormPageBase::on_dropdown_changed(lv_event_t *e) {
     lv_obj_t *checkbox = (lv_obj_t*)lv_event_get_target(e);
     int option_index = (int)(intptr_t)lv_event_get_user_data(e);
+    
+    // Get the form instance from the screen's user_data
+    lv_obj_t *screen = lv_obj_get_screen(checkbox);
+    FormPageBase* form = (FormPageBase*)lv_obj_get_user_data(screen);
+    
+    if (!form) {
+        Serial.println("[FormPageBase] ERROR: Could not get form instance from screen user_data");
+        return;
+    }
     
     lv_obj_t *container = lv_obj_get_parent(checkbox);
     
@@ -228,10 +247,10 @@ void FormPageBase::on_dropdown_changed(lv_event_t *e) {
             }
         }
         
-        answers[current_page] = option_index;
+        form->answers[form->current_page] = option_index;
         
         Serial.print("Page ");
-        Serial.print(current_page);
+        Serial.print(form->current_page);
         Serial.print(" - Selected option: ");
         Serial.println(option_index);
     }
