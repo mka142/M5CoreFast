@@ -42,7 +42,7 @@ static const char *feeling_adjectives[] = {
 };
 
 // Feeling scale options
-static const char *feeling_scale[] = {"nie", "trochę", "tak", "bardzo", "zdecydowanie"};
+static const char *feeling_scale[] = {"nie", "trochę", "tak", "bardzo"};
 
 // Concentration options
 static const char *concentration_options[] = {"bardzo wysoko", "wysoko", "raczej wysoko", "trudno powiedzieć", "raczej nisko", "nisko", "bardzo nisko"};
@@ -77,9 +77,10 @@ const char* ResearchFormPage::get_intro_title() {
 }
 
 const char* ResearchFormPage::get_intro_text() {
-    return "Cześć! Dziękujemy za wysłuchanie koncertu i udział w badaniu :D\n\n"
-           "Na sam koniec jeszcze tylko kilka krótkich pytań, które pozwolą nam "
-           "lepiej zrozumieć - co czują wrocławianie?";
+    return "Witamy na koncercie!\n\n"
+           "Dziękujemy za udział w badaniu \"Co czują Wrocławianie?\".\n\n"
+           "Przed koncertem prosimy o wypełnienie krótkiego formularza, "
+           "który pomoże nam lepiej zrozumieć Państwa odczucia.";
 }
 
 void ResearchFormPage::create_intro_screen() {
