@@ -21,6 +21,10 @@
 #include "pages/ResearchForm/ResearchFormPage.h"
 #include "pages/ChargingPage.h"
 #include "pages/OvationPage.h"
+#include "pages/PieceAnnouncementPage.h"
+#include "pages/EndOfConcertPage.h"
+#include "pages/FeedbackForm/FeedbackFormPage.h"
+#include "pages/FormFinishedPage.h"
 
 // Widgets
 #include <SponsorCarousel.h>
@@ -113,6 +117,10 @@ void setup() {
     lv_obj_t *researchFormScreen = ResearchFormPage::create();
     lv_obj_t *chargingScreen = ChargingPage::create();
     lv_obj_t *ovationScreen = OvationPage::create();
+    lv_obj_t *pieceAnnouncementScreen = PieceAnnouncementPage::create();
+    lv_obj_t *endOfConcertScreen = EndOfConcertPage::create();
+    lv_obj_t *feedbackFormScreen = FeedbackFormPage::create();
+    lv_obj_t *formFinishedScreen = FormFinishedPage::create();
     Serial.println("10. All screens created!");
     
     // Register screens with navigator
@@ -126,7 +134,18 @@ void setup() {
     navigator.registerScreen(BEFORE_CONCERT__RESEARCH_FORM, researchFormScreen);
     navigator.registerScreen(CHARGING, chargingScreen);
     navigator.registerScreen(OVATION, ovationScreen);
+    navigator.registerScreen(PIECE_ANNOUNCEMENT, pieceAnnouncementScreen);
+    navigator.registerScreen(END_OF_CONCERT, endOfConcertScreen);
+    navigator.registerScreen(END_OF_CONCERT__FEEDBACK_FORM, feedbackFormScreen);
+    navigator.registerScreen(END_OF_CONCERT__FORM_FINISHED, formFinishedScreen);
     Serial.println("12. Screens registered!");
+    
+    // Set mock data for piece announcement page
+    PieceAnnouncementPage::setComposer("Fryderyk Chopin");
+    PieceAnnouncementPage::setPiece("Nokturno cis-moll op. 27 nr 1");
+    PieceAnnouncementPage::setPerformers("Jan Kowalski - fortepian\nAnna Nowak - skrzypce");
+    PieceAnnouncementPage::setDescription("Nokturno powstało w 1836 roku i jest jednym z najpiękniejszych utworów Chopina. Charakteryzuje się melancholijnym nastrojem i bogatą harmonią.");
+    
     navigator.registerScreen(SPONSORS, sponsorsScreen);
     navigator.registerScreen(LOADING, loadingScreen);
 
@@ -284,6 +303,11 @@ void loop() {
                     Serial.println("-> SLIDER_DEMO (for testing)");
                     break;
                 case SLIDER_DEMO:
+                    navigator.showPage(PIECE_ANNOUNCEMENT);
+                    rgb.setColor(0, 0, 0);  // Off during announcement
+                    Serial.println("-> PIECE_ANNOUNCEMENT");
+                    break;
+                case PIECE_ANNOUNCEMENT:
                     navigator.showPage(TENSION_MEASUREMENT);
                     Serial.println("-> TENSION_MEASUREMENT");
                     break;
@@ -293,6 +317,10 @@ void loop() {
                     Serial.println("-> OVATION");
                     break;
                 case OVATION:
+                    navigator.showPage(END_OF_CONCERT);
+                    Serial.println("-> END_OF_CONCERT");
+                    break;
+                case END_OF_CONCERT:
                     navigator.showPage(SPONSORS);
                     Serial.println("-> SPONSORS");
                     break;
