@@ -32,6 +32,42 @@
 // Adapters
 #include <HMIAdapter.h>
 #include <RGBAdapter.h>
+#include <WiFiAdapter.h>
+#include <RTCAdapter.h>
+#include <HTTPAdapter.h>
+#include <MQTTAdapter.h>
+#include <MQTTPageBridge.h>
+
+// ==================== NETWORK CONFIGURATION ====================
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
+#define NTP_TIMEZONE "UTC+2"
+#define NTP_SERVER1 "0.pool.ntp.org"
+#define NTP_SERVER2 "1.pool.ntp.org"
+#define NTP_SERVER3 "2.pool.ntp.org"
+
+// MQTT Configuration
+#define MQTT_SERVER ""
+#define MQTT_PORT 1883
+
+// DEVICE_ID is set at build time via deploy script
+// If not set, use a default value
+#ifndef DEVICE_ID
+#define DEVICE_ID "device_default"
+#endif
+
+// Convert macro to string for use in constructors
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+const char* MQTT_CLIENT_ID = TOSTRING(DEVICE_ID);
+
+#define MQTT_USERNAME "your_username" // Optional
+#define MQTT_PASSWORD "your_password" // Optional
+#define MQTT_TOPIC_EVENTS "events/broadcast"
+#define MQTT_TOPIC_STATUS "display/status"
+
+// API Configuration
+#define FORM_API_HOST ""
 
 
 // Display resolution
@@ -45,6 +81,13 @@ constexpr bool SHOW_CHARGING = false;  // Set to false to disable charging scree
 PageNavigator navigator;
 HMIAdapter hmi;
 RGBAdapter rgb;
+
+// Network adapters
+WiFiAdapter wifi;
+RTCAdapter rtc;
+HTTPAdapter httpAdapter;
+MQTTAdapter* mqttAdapter = nullptr;
+MQTTPageBridge* mqttPageBridge = nullptr;
 
 // Current encoder value for UI updates
 int lastEncoderValue = 0;
@@ -86,7 +129,7 @@ void setup() {
     CoreS3.begin(cfg);
     Serial.println("2. M5CoreS3 initialized!");
     
-    // Initialize LVGL
+    // Initialize LVGL EARLY so we can show status on screen
     Serial.println("3. Initializing LVGL...");
     LVGLDisplay::init(HOR_RES, VER_RES);
     Serial.println("4. LVGL initialized!");
@@ -98,16 +141,83 @@ void setup() {
     lv_indev_set_read_cb(indev, touchpad_read);
     Serial.println("6. Touch input configured!");
     
+    // Create a status screen to show initialization progress
+    lv_obj_t* status_screen = lv_obj_create(nullptr);
+    lv_obj_set_style_bg_color(status_screen, lv_color_hex(0x000000), 0);
+    lv_screen_load(status_screen);
+    
+    lv_obj_t* status_label = lv_label_create(status_screen);
+    lv_obj_set_style_text_color(status_label, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_width(status_label, 280);
+    lv_label_set_long_mode(status_label, LV_LABEL_LONG_WRAP);
+    lv_obj_align(status_label, LV_ALIGN_CENTER, 0, 0);
+    lv_label_set_text(status_label, "Inicjalizacja...\n\nŁączenie z WiFi...");
+    lv_task_handler();  // Force screen update
+    
     // Initialize hardware adapters
     Serial.println("7. Initializing adapters...");
     rgb.begin(5, 10);  // Pin 5, 10 LEDs
     rgb.setColor(0, 0, 0);  // Start with RGB off
     hmi.begin();
     Serial.println("8. Adapters initialized!");
+    
+    // Initialize WiFi and RTC
+    Serial.println("9. Initializing WiFi...");
+    Serial.print("   Device ID: ");
+    Serial.println(MQTT_CLIENT_ID);
+    Serial.print("   SSID: ");
+    Serial.println(WIFI_SSID);
+    wifi.begin(WIFI_SSID, WIFI_PASSWORD);
+    
+    // Try to connect with timeout (10 seconds max)
+    unsigned long wifi_start = millis();
+    const unsigned long wifi_timeout = 10000;  // 10 seconds
+    int dots = 0;
+    while (!wifi.isConnected() && (millis() - wifi_start < wifi_timeout)) {
+        unsigned long elapsed = (millis() - wifi_start) / 1000;
+        Serial.print("   Connecting to WiFi");
+        Serial.print("...");
+        Serial.print(elapsed);
+        Serial.println("s");
+        
+        // Update screen status
+        char status_text[128];
+        snprintf(status_text, sizeof(status_text), 
+                "Inicjalizacja...\n\nŁączenie z WiFi:\n%s\n%lus / 10s", 
+                WIFI_SSID, elapsed);
+        lv_label_set_text(status_label, status_text);
+        lv_task_handler();  // Force screen update
+        
+        wifi.loop();
+        delay(500);
+        dots++;
+    }
+    
+    if (wifi.isConnected()) {
+        Serial.println("10. WiFi connected!");
+        lv_label_set_text(status_label, "Inicjalizacja...\n\nWiFi: Połączono!\n\nŁadowanie...");
+        lv_task_handler();
+        rgb.setColor(0, 50, 0);  // Green for WiFi success
+        delay(1000);
+    } else {
+        Serial.println("10. WiFi connection timeout - continuing without WiFi");
+        lv_label_set_text(status_label, "Inicjalizacja...\n\nWiFi: Brak połączenia\n(kontynuacja bez WiFi)\n\nŁadowanie...");
+        lv_task_handler();
+        rgb.setColor(50, 0, 0);  // Red for WiFi failure
+        delay(2000);
+    }
+    
+    Serial.println("11. Initializing RTC...");
+    rtc.begin();
+    // rtc.setLocalTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
+    Serial.println("12. RTC initialized!");
 
     // ==================== SETUP SCREENS ====================
     // Create all screens
-    Serial.println("9. Creating screens...");
+    Serial.println("13. Creating screens...");
+    lv_label_set_text(status_label, "Tworzenie ekranów...");
+    lv_task_handler();
+    rgb.setColor(0, 0, 0);  // Reset RGB
     lv_obj_t *sponsorsScreen = SponsorsPage::create();
     lv_obj_t *loadingScreen = LoadingPage::create();
     lv_obj_t *beforeConcertScreen = BeforeConcertPage::create();
@@ -121,10 +231,10 @@ void setup() {
     lv_obj_t *endOfConcertScreen = EndOfConcertPage::create();
     lv_obj_t *feedbackFormScreen = FeedbackFormPage::create();
     lv_obj_t *formFinishedScreen = FormFinishedPage::create();
-    Serial.println("10. All screens created!");
+    Serial.println("14. All screens created!");
     
     // Register screens with navigator
-    Serial.println("11. Registering screens...");
+    Serial.println("15. Registering screens...");
     navigator.registerScreen(SPONSORS, sponsorsScreen);
     navigator.registerScreen(LOADING, loadingScreen);
     navigator.registerScreen(BEFORE_CONCERT, beforeConcertScreen);
@@ -138,43 +248,87 @@ void setup() {
     navigator.registerScreen(END_OF_CONCERT, endOfConcertScreen);
     navigator.registerScreen(END_OF_CONCERT__FEEDBACK_FORM, feedbackFormScreen);
     navigator.registerScreen(END_OF_CONCERT__FORM_FINISHED, formFinishedScreen);
-    Serial.println("12. Screens registered!");
+    Serial.println("16. Screens registered!");
     
     // Set mock data for piece announcement page
     PieceAnnouncementPage::setComposer("Fryderyk Chopin");
     PieceAnnouncementPage::setPiece("Nokturno cis-moll op. 27 nr 1");
     PieceAnnouncementPage::setPerformers("Jan Kowalski - fortepian\nAnna Nowak - skrzypce");
     PieceAnnouncementPage::setDescription("Nokturno powstało w 1836 roku i jest jednym z najpiękniejszych utworów Chopina. Charakteryzuje się melancholijnym nastrojem i bogatą harmonią.");
+
+    // ==================== INITIALIZE HTTP AND MQTT ====================
+    if (wifi.isConnected()) {
+        Serial.println("17. Initializing HTTP adapter...");
+        lv_label_set_text(status_label, "Inicjalizacja HTTP...");
+        lv_task_handler();
+        httpAdapter.begin();
+        Serial.println("18. HTTP adapter initialized!");
+        
+        Serial.println("19. Creating MQTT adapter...");
+        mqttAdapter = new MQTTAdapter(MQTT_SERVER, MQTT_PORT, MQTT_CLIENT_ID);
+        mqttPageBridge = new MQTTPageBridge(*mqttAdapter, navigator);
+        Serial.println("20. MQTT objects created!");
+        
+        Serial.println("21. Initializing MQTT adapter...");
+        lv_label_set_text(status_label, "Inicjalizacja MQTT...");
+        lv_task_handler();
+        mqttAdapter->begin(MQTT_USERNAME, MQTT_PASSWORD);
+        mqttAdapter->subscribeTo(MQTT_TOPIC_EVENTS);
+        Serial.println("22. MQTT adapter initialized!");
+        
+        Serial.println("23. Setting up MQTT page bridge...");
+        lv_label_set_text(status_label, "Konfiguracja MQTT...");
+        lv_task_handler();
+        mqttPageBridge->begin();
+        mqttPageBridge->addPageMapping("SPONSORS", SPONSORS);
+        mqttPageBridge->addPageMapping("LOADING", LOADING);
+        mqttPageBridge->addPageMapping("BEFORE_CONCERT", BEFORE_CONCERT);
+        mqttPageBridge->addPageMapping("BEFORE_CONCERT__RESEARCH_FORM", BEFORE_CONCERT__RESEARCH_FORM);
+        mqttPageBridge->addPageMapping("APP_GUIDE", APP_GUIDE);
+        mqttPageBridge->addPageMapping("SLIDER_DEMO", SLIDER_DEMO);
+        mqttPageBridge->addPageMapping("TENSION_MEASUREMENT", TENSION_MEASUREMENT);
+        mqttPageBridge->addPageMapping("OVATION", OVATION);
+        mqttPageBridge->addPageMapping("PIECE_ANNOUNCEMENT", PIECE_ANNOUNCEMENT);
+        mqttPageBridge->addPageMapping("END_OF_CONCERT", END_OF_CONCERT);
+        mqttPageBridge->addPageMapping("END_OF_CONCERT__FEEDBACK_FORM", END_OF_CONCERT__FEEDBACK_FORM);
+        mqttPageBridge->addPageMapping("END_OF_CONCERT__FORM_FINISHED", END_OF_CONCERT__FORM_FINISHED);
+        
+        // Register payload handlers for pages that need event data
+        mqttPageBridge->registerPayloadHandler(OVATION, OvationPage::setPayload);
+        mqttPageBridge->registerPayloadHandler(PIECE_ANNOUNCEMENT, PieceAnnouncementPage::setPayload);
+        
+        Serial.println("24. MQTT page bridge configured!");
+    } else {
+        Serial.println("17. Skipping HTTP/MQTT initialization - no WiFi connection");
+        lv_label_set_text(status_label, "Pomijanie HTTP/MQTT\n(brak WiFi)");
+        lv_task_handler();
+        delay(1000);
+    }
+
+    // Show "Ready!" message before switching to main screen
+    Serial.println("25. Initialization complete!");
+    lv_label_set_text(status_label, "Gotowe!\n\nPrzełączanie...");
+    lv_task_handler();
+    delay(500);
     
-    navigator.registerScreen(SPONSORS, sponsorsScreen);
-    navigator.registerScreen(LOADING, loadingScreen);
-
-    navigator.registerScreen(BEFORE_CONCERT, beforeConcertScreen);
-    navigator.registerScreen(BEFORE_CONCERT__RESEARCH_FORM, researchFormScreen);
-
-    navigator.registerScreen(SLIDER_DEMO, sliderScreen);
-    navigator.registerScreen(TENSION_MEASUREMENT, tensionScreen);
-
-    // Internal charging screen
-    navigator.registerScreen(CHARGING, chargingScreen);
-    Serial.println("12. Screens registered!");
-    
+    // Clean up status screen (will be replaced by first page)
+    lv_obj_del(status_screen);
 
     // ==================== CHARGING LOGIC SETUP ====================
     // Check if device is charging at startup (only if SHOW_CHARGING is enabled)
     bool is_charging = SHOW_CHARGING && M5.Power.isCharging();
     if (is_charging) {
-        Serial.println("13. Device is charging - showing CHARGING page...");
+        Serial.println("26. Device is charging - showing CHARGING page...");
         navigator.showPage(CHARGING);
         // Turn off RGB
         rgb.setColor(0, 0, 0);
         was_charging = true;
-        Serial.println("14. CHARGING page displayed!");
+        Serial.println("27. CHARGING page displayed!");
     } else {
         // Show sponsors page initially
-        Serial.println("13. Showing SPONSORS page...");
+        Serial.println("26. Showing SPONSORS page...");
         navigator.showPage(SPONSORS);
-        Serial.println("14. SPONSORS page displayed!");
+        Serial.println("27. SPONSORS page displayed!");
     }
     
     Serial.println("================================");
@@ -190,6 +344,16 @@ void loop() {
     M5.update();
     lv_task_handler();  // Handle LVGL tasks
     
+    // ==================== NETWORK ADAPTERS ====================
+    // Always call wifi.loop() to maintain connection
+    wifi.loop();
+    
+    // Only call MQTT/HTTP if we have WiFi and adapters are initialized
+    if (wifi.isConnected() && mqttAdapter != nullptr && mqttPageBridge != nullptr) {
+        mqttAdapter->loop();
+        mqttPageBridge->loop();
+        httpAdapter.loop();
+    }
 
     // ==================== DEBUG MEMORY LOGGING ====================
     counter++;
