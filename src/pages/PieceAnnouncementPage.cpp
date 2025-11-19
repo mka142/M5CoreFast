@@ -103,28 +103,28 @@ void PieceAnnouncementPage::setPayload(const EventSchema& payload) {
     
     if (!data.isNull()) {
         // Update composer
-        if (data.containsKey("composerName")) {
+        if (data["composerName"].is<const char*>()) {
             setComposer(data["composerName"].as<const char*>());
         } else {
             setComposer("Kompozytor nieznany");
         }
         
         // Update piece title
-        if (data.containsKey("pieceTitle")) {
+        if (data["pieceTitle"].is<const char*>()) {
             setPiece(data["pieceTitle"].as<const char*>());
         } else {
             setPiece("Utwór nieznany");
         }
         
         // Update performers
-        if (data.containsKey("performers")) {
+        if (data["performers"].is<const char*>()) {
             setPerformers(data["performers"].as<const char*>());
         } else {
             setPerformers("");
         }
         
         // Update description
-        if (data.containsKey("pieceDescription")) {
+        if (data["pieceDescription"].is<const char*>()) {
             setDescription(data["pieceDescription"].as<const char*>());
         } else {
             setDescription("");

@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <lvgl.h>
-#include <MQTTAdapter.h>  // For EventSchema
+#include <MQTTCommon.h>  // For EventSchema
 
 class OvationPage {
 public:

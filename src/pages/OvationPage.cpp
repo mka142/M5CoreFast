@@ -98,7 +98,7 @@ void OvationPage::setPayload(const EventSchema& payload) {
     eventPayload = payload;
     
     // Update UI with payload data
-    if (!payload.payload.isNull() && payload.payload.containsKey("message")) {
+    if (!payload.payload.isNull() && payload.payload["message"].is<const char*>()) {
         const char* message = payload.payload["message"];
         setMessage(message);
     } else if (!payload.label.empty()) {
