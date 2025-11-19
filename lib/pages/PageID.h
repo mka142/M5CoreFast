@@ -6,15 +6,21 @@
 enum PageID
 {
     SPONSORS,         // Sponsor logos carousel
+    // PAGE SET
     BEFORE_CONCERT,
+    BEFORE_CONCERT__RESEARCH_FORM,    // Research form (sub-page of BEFORE_CONCERT)
+    //
     APP_GUIDE,
     SLIDER_DEMO,
     CONCERT_START,
     PIECE_ANNOUNCEMENT,
     TENSION_MEASUREMENT,
     OVATION,
+    // PAGE SET
     END_OF_CONCERT,
-    BEFORE_CONCERT__RESEARCH_FORM,    // Research form (sub-page of BEFORE_CONCERT)
+    END_OF_CONCERT__FEEDBACK_FORM,    // Feedback form (sub-page of END_OF_CONCERT)
+    END_OF_CONCERT__FORM_FINISHED,    // Thank you page after feedback form
+    //
     CHARGING,         // Internal charging screen (auto-displayed when charging)
     // Add more as needed
     LOADING // Special page for loading state
