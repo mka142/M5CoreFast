@@ -236,6 +236,16 @@ lv_obj_t* TensionMeasurementPage::create() {
     return screen;
 }
 
+void TensionMeasurementPage::firstRender() {
+    // Turn off RGB LEDs initially for tension measurement page
+    rgb.setColor(0, 0, 0);
+}
+
+void TensionMeasurementPage::lastRender() {
+    // No special cleanup needed
+}
+
+
 void TensionMeasurementPage::handleEncoder(int delta) {
     if (!bar_obj) return;
 

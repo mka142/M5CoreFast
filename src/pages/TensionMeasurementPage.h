@@ -6,6 +6,8 @@
 class TensionMeasurementPage {
 public:
     static lv_obj_t* create();
+    static void firstRender();
+    static void lastRender();
     static void updateValue(int value);
     static void updateBuffer(int count, int max);
     static void handleEncoder(int delta);

@@ -6,6 +6,8 @@
 class AppGuidePage {
 public:
     static lv_obj_t* create();
+    static void firstRender();
+    static void lastRender();
     static void cleanup();
     
 private:

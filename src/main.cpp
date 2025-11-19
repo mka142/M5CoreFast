@@ -48,14 +48,14 @@
 #define NTP_SERVER3 "2.pool.ntp.org"
 
 // MQTT Configuration (currently disabled - using HTTP polling instead)
-#define MQTT_SERVER ""//"server.device-manager.fast.knakitm.pl"
+#define MQTT_SERVER "server.device-manager.fast.knakitm.pl"
 #define MQTT_PORT 443        // Port 443 for WSS (WebSocket Secure)
 #define MQTT_USE_WSS false   // Disabled: TLS verification issues
 #define MQTT_WS_PATH "/mqtt" // WebSocket path on server
 #define USE_MQTT false       // Set to true to use MQTT, false to use HTTP polling
 
 // HTTP Polling Configuration
-#define EVENT_API_ENDPOINT ""//"https://server.device-manager.fast.knakitm.pl/api/concert/currentEvent"
+#define EVENT_API_ENDPOINT "https://server.device-manager.fast.knakitm.pl/api/concert/currentEvent"
 #define POLL_INTERVAL_MS 5000  // Poll every 5 seconds
 
 // DEVICE_ID is set at build time via deploy script
@@ -82,7 +82,7 @@ constexpr int32_t HOR_RES = 320;
 constexpr int32_t VER_RES = 240;
 
 // Feature flags
-constexpr bool SHOW_CHARGING = true; // Set to false to disable charging screen
+constexpr bool SHOW_CHARGING = false; // Set to false to disable charging screen
 constexpr bool PREVIEW_MODE = false; // Set to true to skip WiFi/MQTT for and testing UI only
 
 // Global objects
@@ -299,6 +299,20 @@ void setup()
     navigator.registerScreen(END_OF_CONCERT__FEEDBACK_FORM, feedbackFormScreen);
     navigator.registerScreen(END_OF_CONCERT__FORM_FINISHED, formFinishedScreen);
     Serial.println("16. Screens registered!");
+
+    // Register page callbacks
+    navigator.registerPageCallbacks(BEFORE_CONCERT, 
+                                   BeforeConcertPage::firstRender, 
+                                   BeforeConcertPage::lastRender);
+    navigator.registerPageCallbacks(LOADING,
+                                   LoadingPage::firstRender,
+                                   LoadingPage::lastRender);
+    navigator.registerPageCallbacks(APP_GUIDE,
+                                   AppGuidePage::firstRender,
+                                   AppGuidePage::lastRender);
+    navigator.registerPageCallbacks(TENSION_MEASUREMENT,
+                                   TensionMeasurementPage::firstRender,
+                                   TensionMeasurementPage::lastRender);
 
     // ==================== INITIALIZE HTTP AND EVENT POLLING ====================
     if (!skip_network && wifi.isConnected())
@@ -547,105 +561,6 @@ void loop()
             delay(5);
             return;
         }
-    }
-
-    // ==================== TESTING UI OPERATION ====================
-    // Handle HMI input for page navigation
-    static bool btnA_pressed = false;
-    static bool btnB_pressed = false;
-
-    bool btnA = hmi.getButtonA();
-    bool btnB = hmi.getButtonB();
-
-    if (PREVIEW_MODE)
-    {
-
-        // Button A: cycle through pages
-        if (btnA && !btnA_pressed)
-        {
-            btnA_pressed = true;
-            PageID current = navigator.getCurrentPage();
-            // Normal page cycling
-            // set rgb off
-            rgb.setColor(0, 0, 0);
-            switch (current)
-            {
-            case LOADING:
-                navigator.showPage(APP_GUIDE);
-                rgb.setColor(50, 50, 150); // Blue tint
-                Serial.println("-> APP_GUIDE");
-                break;
-            case APP_GUIDE:
-                navigator.showPage(BEFORE_CONCERT);
-                // Set RGB sides: purple (0x9261D5) on left, cyan (0x42B2C2) on right
-                // Assuming 10 LEDs, split them: 0-4 cyan, 5-9 purple
-                for (int i = 0; i < 5; i++)
-                {
-                    rgb.setPixel(i, 0x42, 0xB2, 0xC2); // Cyan
-                }
-                for (int i = 5; i < 10; i++)
-                {
-                    rgb.setPixel(i, 0x92, 0x61, 0xD5); // Purple
-                }
-                rgb.show();
-                Serial.println("-> BEFORE_CONCERT");
-                break;
-            case SPONSORS:
-                navigator.showPage(LOADING);
-                rgb.setColor(100, 100, 100); // Gray
-                Serial.println("-> LOADING");
-                break;
-
-            case BEFORE_CONCERT:
-                // Don't auto-navigate - user clicks button to go to RESEARCH_FORM
-                navigator.showPage(SLIDER_DEMO);
-                Serial.println("-> SLIDER_DEMO (for testing)");
-                break;
-            case SLIDER_DEMO:
-                navigator.showPage(PIECE_ANNOUNCEMENT);
-                rgb.setColor(0, 0, 0); // Off during announcement
-                Serial.println("-> PIECE_ANNOUNCEMENT");
-                break;
-            case PIECE_ANNOUNCEMENT:
-                navigator.showPage(TENSION_MEASUREMENT);
-                Serial.println("-> TENSION_MEASUREMENT");
-                break;
-            case TENSION_MEASUREMENT:
-                navigator.showPage(OVATION);
-                rgb.setColor(0, 0, 0); // Off during ovation
-                Serial.println("-> OVATION");
-                break;
-            case OVATION:
-                navigator.showPage(END_OF_CONCERT);
-                Serial.println("-> END_OF_CONCERT");
-                break;
-            case END_OF_CONCERT:
-                navigator.showPage(SPONSORS);
-                Serial.println("-> SPONSORS");
-                break;
-            case BEFORE_CONCERT__RESEARCH_FORM:
-                // Research form navigates back to BEFORE_CONCERT via its submit button
-                navigator.showPage(BEFORE_CONCERT);
-                Serial.println("-> BEFORE_CONCERT (from form)");
-                break;
-            default:
-                navigator.showPage(SPONSORS);
-                break;
-            }
-        }
-        if (!btnA)
-            btnA_pressed = false;
-
-        // Button B: go back to sponsors
-        if (btnB && !btnB_pressed)
-        {
-            btnB_pressed = true;
-            navigator.showPage(SPONSORS);
-            rgb.setColor(255, 255, 255);
-            Serial.println("-> SPONSORS (back)");
-        }
-        if (!btnB)
-            btnB_pressed = false;
     }
 
     // ==================== TENSION MEASUREMENT PAGE LOGIC ====================

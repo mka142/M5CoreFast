@@ -6,6 +6,8 @@
 class LoadingPage {
 public:
     static lv_obj_t* create();
+    static void firstRender();
+    static void lastRender();
     static void update_animation(lv_timer_t *timer);
     
 private:

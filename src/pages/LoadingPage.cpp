@@ -1,8 +1,12 @@
 #include "LoadingPage.h"
 #include <polish_fonts.h>
+#include <RGBAdapter.h>
 
 // Declare external image
 LV_IMG_DECLARE(note);
+
+// Access the global RGB adapter instance declared in main.cpp
+extern RGBAdapter rgb;
 
 lv_obj_t* LoadingPage::note_img1 = nullptr;
 lv_obj_t* LoadingPage::note_img2 = nullptr;
@@ -58,6 +62,16 @@ lv_obj_t* LoadingPage::create() {
     
     return screen;
 }
+
+void LoadingPage::firstRender() {
+    // Turn off RGB LEDs for loading page
+    rgb.setColor(0, 0, 0);
+}
+
+void LoadingPage::lastRender() {
+    // No special cleanup needed
+}
+
 
 void LoadingPage::update_animation(lv_timer_t *timer) {
     if (!note_img1 || !note_img2 || !note_img3) return;

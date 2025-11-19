@@ -1,5 +1,9 @@
 #include "AppGuidePage.h"
 #include <polish_fonts.h>
+#include <RGBAdapter.h>
+
+// Declare external RGB adapter
+extern RGBAdapter rgb;
 
 lv_obj_t *AppGuidePage::screen = nullptr;
 lv_obj_t *AppGuidePage::scroll_container = nullptr;
@@ -54,16 +58,27 @@ lv_obj_t *AppGuidePage::create()
     create_info_card(scroll_container,
                      LV_SYMBOL_CHARGE,
                      "Napięcie muzyczne",
-                     "Podczas trwania koncertu, będziesz rejestrować odczucia napięcia muzycznego. Obracaj pokrętło, w górę i w dół, aby zmieniać wartość napięcia.",
+                     "Podczas trwania koncertu będziesz rejestrować odczucia napięcia muzycznego. Obracaj pokrętło w górę i w dół, aby zmieniać wartość napięcia.",
                      0);
 
     create_info_card(scroll_container,
                      LV_SYMBOL_WARNING,
-                     "Po koncertcie",
-                     "Prosimy o zwrot urządzenia organizatorom -- Dziękujemy!",
+                     "Po koncercie",
+                     "Prosimy o zwrot urządzenia organizatorom - dziękujemy!",
                      0);
 
-        return screen;
+    return screen;
+}
+
+void AppGuidePage::firstRender()
+{
+    // Turn off RGB LEDs for app guide page
+    rgb.setColor(0, 0, 0);
+}
+
+void AppGuidePage::lastRender()
+{
+    // No special cleanup needed
 }
 
 void AppGuidePage::create_info_card(lv_obj_t *parent, const char *icon, const char *title, const char *description, int y_offset)
