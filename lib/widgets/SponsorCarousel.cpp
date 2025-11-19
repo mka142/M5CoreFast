@@ -56,7 +56,7 @@ void SponsorCarousel::start(uint32_t duration_ms, bool random) {
     }
     
     display_duration = duration_ms;
-    random_mode = random;
+    random_mode = false; // Always sequential
     
     // Create image containers if needed
     if (!img_current) {
@@ -71,23 +71,10 @@ void SponsorCarousel::start(uint32_t duration_ms, bool random) {
         lv_obj_set_style_image_opa(img_next, LV_OPA_TRANSP, 0);
     }
     
-    // Create display order (one-time shuffle if random requested)
+    // Always sequential order
     batch_order.clear();
     for (int i = 0; i < logos.size(); i++) {
         batch_order.push_back(i);
-    }
-    
-    if (random_mode) {
-        // Fisher-Yates shuffle - done ONCE
-        for (int i = batch_order.size() - 1; i > 0; i--) {
-            int j = ::random(0, i + 1);  // Use global random() function
-            std::swap(batch_order[i], batch_order[j]);
-        }
-        Serial.print("[SponsorCarousel] Shuffled order: ");
-        for (int idx : batch_order) {
-            Serial.printf("%d ", idx);
-        }
-        Serial.println();
     }
     
     // Start with first logo in order

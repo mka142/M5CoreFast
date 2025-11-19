@@ -29,12 +29,13 @@
 #include <HMIAdapter.h>
 #include <RGBAdapter.h>
 
+
 // Display resolution
 constexpr int32_t HOR_RES = 320;
 constexpr int32_t VER_RES = 240;
 
 // Feature flags
-constexpr bool SHOW_CHARGING = true;  // Set to false to disable charging screen
+constexpr bool SHOW_CHARGING = false;  // Set to false to disable charging screen
 
 // Global objects
 PageNavigator navigator;
@@ -316,14 +317,24 @@ void loop() {
     }
     if (!btnB) btnB_pressed = false;
     
-    // Update tension page with encoder value
+    // Update tension page with encoder value (with momentum physics)
     if (navigator.getCurrentPage() == TENSION_MEASUREMENT) {
         int encoderValue = hmi.getEncoderValue();
-        if (encoderValue != lastEncoderValue) {
-            lastEncoderValue = encoderValue;
-            TensionMeasurementPage::updateValue(encoderValue);
-            
-            // Simulate buffer filling
+        int rawDiff = encoderValue - lastEncoderValue;
+        int delta = rawDiff;  // use raw diff for proportional response
+
+        // Throttled debug print to observe encoder behavior
+        static unsigned long lastEncLog = 0;
+        if (millis() - lastEncLog > 200) {
+            Serial.printf("ENCODER raw=%d last=%d diff=%d delta=%d\n", encoderValue, lastEncoderValue, rawDiff, delta);
+            lastEncLog = millis();
+        }
+
+        if (delta != 0) {
+            lastEncoderValue += delta;
+            TensionMeasurementPage::handleEncoder(delta);
+
+            // Simulate buffer filling (kept for compatibility; label is commented out)
             tensionBufferCount++;
             if (tensionBufferCount > 200) tensionBufferCount = 0;
             TensionMeasurementPage::updateBuffer(tensionBufferCount, 200);
