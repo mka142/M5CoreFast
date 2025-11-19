@@ -25,7 +25,15 @@ private:
     static float wave_amplitude;    // Wave ripple amplitude (decays with velocity)
     static float wave_phase;        // Wave animation phase
     static float breakaway_accumulator; // Accumulates small encoder movements until breakaway threshold
+    static float input_activity;    // 0..1 recent encoder activity (used to modulate braking/momentum)
     static lv_timer_t *momentum_timer;
+    // Recording LED (bottom-left) and its timer
+    static lv_obj_t *recording_led;
+    static lv_timer_t *recording_led_timer;
+    static float recording_phase;
+    static void recordingLedTimer(lv_timer_t *timer);
+    static lv_obj_t *recording_label;
+    // Top-left illustrative knob removed; keep only recording LED + label on left
     static void momentumTimerCallback(lv_timer_t *timer);
     static void updateDisplay();
     static void drawWaveEffect();
@@ -43,14 +51,23 @@ private:
 
     // Momentum: increase inertia for heavier movement (slower decay)
     // Increase inertia and smoothing so "weight" is visible
-    static constexpr float MOMENTUM_DECAY = 0.994f;    // closer to 1 => longer coast
+    static constexpr float MOMENTUM_DECAY = 0.996f;    // closer to 1 => longer coast
+    // Extra decay gained when input activity is high (makes fast flicks coast longer)
+    static constexpr float MOMENTUM_DECAY_BOOST = 0.0025f;
     static constexpr float VELOCITY_THRESHOLD = 0.06f; // ignore tiny jitter
     static constexpr uint32_t MOMENTUM_INTERVAL = 16;  // update rate (ms)
 
     // Velocity smoothing: stronger low-pass so motion feels heavier
-    static constexpr float VELOCITY_SMOOTHING = 0.92f; // high smoothing => heavy feel
+    static constexpr float VELOCITY_SMOOTHING = 0.94f; // slightly less smoothing to keep responsiveness
+    // How quickly the input_activity state decays per momentum tick (0..1)
+    static constexpr float INPUT_ACTIVITY_DECAY = 0.88f;
+    // How much braking is reduced at max activity (0..1). 1.0 -> full reduction, 0.0 -> no reduction
+    static constexpr float BRAKE_DYNAMIC_REDUCTION = 0.85f;
 
     // Breakaway / static friction: require accumulated input to exceed this to start movement
-    static constexpr float BREAKAWAY_THRESHOLD = 6.0f; // small static friction to emphasize weight
+    static constexpr float BREAKAWAY_THRESHOLD = 8.0f; // moderate static friction to emphasize weight
+    // Braking parameters to provide smooth, finite stop
+    static constexpr float BRAKE_ALPHA = 0.07f;       // gentler per-tick braking (less abrupt)
+    static constexpr float STOP_VELOCITY = 0.35f;     // snap to zero below this velocity (snap later)
     // no animation state
 };

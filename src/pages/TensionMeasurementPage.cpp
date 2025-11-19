@@ -20,6 +20,12 @@ float TensionMeasurementPage::wave_amplitude = 0.0f;
 float TensionMeasurementPage::wave_phase = 0.0f;
 lv_timer_t* TensionMeasurementPage::momentum_timer = nullptr;
 float TensionMeasurementPage::breakaway_accumulator = 0.0f;
+float TensionMeasurementPage::input_activity = 0.0f;
+lv_obj_t* TensionMeasurementPage::recording_led = nullptr;
+lv_timer_t* TensionMeasurementPage::recording_led_timer = nullptr;
+float TensionMeasurementPage::recording_phase = 0.0f;
+lv_obj_t* TensionMeasurementPage::recording_label = nullptr;
+// Top-left knob removed; no related static objects
 
 lv_obj_t* TensionMeasurementPage::create() {
     // Create screen - czarne tło
@@ -112,6 +118,32 @@ lv_obj_t* TensionMeasurementPage::create() {
         momentum_timer = lv_timer_create(momentumTimerCallback, MOMENTUM_INTERVAL, nullptr);
     }
 
+    // Create recording LED in bottom-left corner and start pulsing timer
+    if (recording_led == nullptr) {
+        recording_led = lv_obj_create(screen);
+        // Reduce size by 50% (was 12x12)
+        lv_obj_set_size(recording_led, 6, 6);
+        lv_obj_set_style_radius(recording_led, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_border_width(recording_led, 0, 0);
+        lv_obj_set_style_bg_color(recording_led, lv_color_hex(0xFF0000), 0);
+        // start dimmed; the timer will pulse opacity
+        lv_obj_set_style_bg_opa(recording_led, LV_OPA_30, 0);
+        lv_obj_align(recording_led, LV_ALIGN_BOTTOM_LEFT, 8, -8);
+        recording_phase = 0.0f;
+        recording_led_timer = lv_timer_create(recordingLedTimer, 60, nullptr);
+        // Create a short label 'zapis' to the right and slightly lower than the LED
+        recording_label = lv_label_create(screen);
+        lv_label_set_text(recording_label, "zapis");
+        lv_obj_set_style_text_color(recording_label, lv_color_hex(0xB0B0B0), 0);
+        lv_obj_set_style_text_font(recording_label, &montserrat_12_polish, 0);
+        // Align to the right of the LED and slightly higher so the label sits nearer the LED
+        lv_obj_align_to(recording_label, recording_led, LV_ALIGN_OUT_RIGHT_MID, 6, -1);
+
+        // (long label removed) keep short 'zapis' label only
+    }
+
+    // Top-left illustrative knob removed per user request; only keep recording LED + label
+
     // numeric readout removed (user requested)
 
     return screen;
@@ -166,6 +198,15 @@ void TensionMeasurementPage::handleEncoder(int delta) {
     // Update position immediately (internal range 0..300)
     current_position += movement;
 
+    // Update recent input activity (0..1). Larger movements increase activity which will
+    // temporarily reduce braking and slightly increase coast in the momentum timer.
+    float inst_activity = fabs(movement) / MAX_STEP_PER_TICK; // 0..1 (approx)
+    if (inst_activity > 1.0f) inst_activity = 1.0f;
+    // Smooth into activity state
+    input_activity = input_activity * 0.72f + inst_activity * 0.28f;
+
+    // (directional dot indicators removed along with the knob per user request)
+
     // Clamp to 0..300 range
     if (current_position < 0.0f) {
         current_position = 0.0f;
@@ -218,22 +259,55 @@ void TensionMeasurementPage::handleEncoder(int delta) {
 void TensionMeasurementPage::momentumTimerCallback(lv_timer_t *timer) {
     // Apply momentum decay
     if (fabs(velocity) > VELOCITY_THRESHOLD) {
-        velocity *= MOMENTUM_DECAY;
+        // Primary momentum decay; boost slightly when recent input activity is high so
+        // fast flicks coast longer.
+        float effective_decay = MOMENTUM_DECAY + (MOMENTUM_DECAY_BOOST * input_activity);
+        if (effective_decay > 0.9999f) effective_decay = 0.9999f;
+        velocity *= effective_decay;
+
+        // Compute dynamic braking: reduce BRAKE_ALPHA when activity is high so fast
+        // movements feel like they coast; slow movements still get stronger braking.
+        float dynamic_brake = BRAKE_ALPHA * (1.0f - (BRAKE_DYNAMIC_REDUCTION * input_activity));
+        if (dynamic_brake < 0.0f) dynamic_brake = 0.0f;
+
+        // Apply additional braking (multiplicative)
+        velocity *= (1.0f - dynamic_brake);
+
+        // Advance position
         current_position += velocity;
 
         // Decay wave amplitude with velocity
         wave_amplitude *= MOMENTUM_DECAY;
         wave_phase += 0.3f;  // Advance wave animation
 
-        // Clamp position
+        // Snap-to-zero when velocity drops below configured stop threshold
+        if (fabs(velocity) < STOP_VELOCITY) {
+            velocity = 0.0f;
+            wave_amplitude = 0.0f;
+            // ensure display reflects final settled position
+            if (current_position < 0.0f) current_position = 0.0f;
+            if (current_position > 300.0f) current_position = 300.0f;
+            updateDisplay();
+            // decay the input activity on settle
+            input_activity *= INPUT_ACTIVITY_DECAY;
+            return;
+        }
+
+        // Clamp position during coast
         if (current_position < 0.0f) {
             current_position = 0.0f;
             velocity = 0.0f;
+            wave_amplitude = 0.0f;
         }
         if (current_position > 300.0f) {
             current_position = 300.0f;
             velocity = 0.0f;
+            wave_amplitude = 0.0f;
         }
+
+        // decay recent input activity over time so braking returns to normal
+        input_activity *= INPUT_ACTIVITY_DECAY;
+        if (input_activity < 0.001f) input_activity = 0.0f;
 
         updateDisplay();
     } else {
@@ -241,6 +315,23 @@ void TensionMeasurementPage::momentumTimerCallback(lv_timer_t *timer) {
         wave_amplitude = 0.0f;
     }
 }
+
+void TensionMeasurementPage::recordingLedTimer(lv_timer_t *timer) {
+    if (!recording_led) return;
+    // advance phase
+    recording_phase += 0.18f;
+    if (recording_phase > 10000.0f) recording_phase = fmodf(recording_phase, 6.2831853f);
+
+    // Sine-based pulsing 0..1
+    float v = (sinf(recording_phase) + 1.0f) * 0.5f; // 0..1
+    // Map to LVGL opacity range (use 40..255)
+    int opa = (int)(40 + v * (255 - 40));
+    if (opa < 0) opa = 0;
+    if (opa > 255) opa = 255;
+    lv_obj_set_style_bg_opa(recording_led, (lv_opa_t)opa, 0);
+}
+
+// encoder knob timer removed along with the knob/dots per user request
 
 void TensionMeasurementPage::updateDisplay() {
     if (!bar_obj) return;
@@ -309,4 +400,18 @@ void TensionMeasurementPage::cleanup() {
     velocity = 0.0f;
     wave_amplitude = 0.0f;
     wave_phase = 0.0f;
+
+    if (recording_led_timer) {
+        lv_timer_del(recording_led_timer);
+        recording_led_timer = nullptr;
+    }
+    if (recording_led) {
+        lv_obj_del(recording_led);
+        recording_led = nullptr;
+    }
+    if (recording_label) {
+        lv_obj_del(recording_label);
+        recording_label = nullptr;
+    }
+    // Top-left knob and its helper objects removed; nothing to clean up here
 }
