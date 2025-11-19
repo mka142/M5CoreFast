@@ -106,10 +106,13 @@ void ResearchFormPage::create_intro_screen() {
 }
 
 Question* ResearchFormPage::get_question(int page) {
-    static Question questions[31];
+    Serial.printf("[ResearchForm] get_question called with page=%d\n", page);
+    
+    static Question questions[32];  // Needs 32 elements for indices 0-31 (page 0 unused, pages 1-31 used)
     static bool initialized = false;
     
     if (!initialized) {
+        Serial.println("[ResearchForm] Initializing questions array...");
         // Page 1: Age
         questions[1] = {"wiek", "Wiek", age_options, 7};
         
@@ -137,11 +140,14 @@ Question* ResearchFormPage::get_question(int page) {
         questions[31] = {"muzyka_na_co_dzień", "Jakiej muzyki słuchasz\nna co dzień?", music_pref_options, 5};
         
         initialized = true;
+        Serial.println("[ResearchForm] Questions array initialized successfully");
     }
     
     if (page >= 1 && page <= 31) {
+        Serial.printf("[ResearchForm] Returning question for page %d\n", page);
         return &questions[page];
     }
+    Serial.printf("[ResearchForm] Page %d out of range, returning nullptr\n", page);
     return nullptr;
 }
 
