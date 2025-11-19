@@ -128,7 +128,7 @@ Question* ResearchFormPage::get_question(int page) {
         
         // Pages 5-28: Feeling adjectives (24 questions)
         for (int i = 0; i < 24; i++) {
-            questions[5 + i] = {feeling_adjectives[i], feeling_adjectives[i], feeling_scale, 5};
+            questions[5 + i] = {feeling_adjectives[i], feeling_adjectives[i], feeling_scale, 4};
         }
         
         // Page 29: Concentration
