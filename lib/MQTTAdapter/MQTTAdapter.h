@@ -1,25 +1,11 @@
 #pragma once
+#include "MQTTCommon.h"
 #include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
-#include <ArduinoJson.h>
 #include <queue>
 #include <string>
 #include <functional>
-
-struct EventSchema {
-    std::string concertId;
-    std::string eventType;
-    std::string label;
-    JsonObject payload;
-    int position;
-    unsigned long timestamp; // Added for internal tracking
-};
-
-struct MQTTMessage {
-    std::string topic;
-    std::string rawPayload;
-    unsigned long timestamp;
-};
 
 // Callback function types for loose coupling
 typedef std::function<void(const EventSchema&)> EventCallback;
@@ -27,12 +13,16 @@ typedef std::function<void(bool)> ConnectionCallback;
 
 class MQTTAdapter {
 public:
-    MQTTAdapter(const char* server, int port, const char* clientId);
+    MQTTAdapter(const char* server, int port, const char* clientId, 
+                MQTTConnectionType connType = MQTTConnectionType::TCP);
     void begin(const char* username = nullptr, const char* password = nullptr);
     void subscribeTo(const char* topic);
     void loop(); // Non-blocking, call every frame
     bool isConnected();
     void publish(const char* topic, const char* payload);
+    
+    // WebSocket specific (for WSS mode)
+    void setWebSocketPath(const char* path);  // Default: "/mqtt"
     
     // Callback registration for loose coupling
     void onEvent(EventCallback callback);
@@ -49,13 +39,16 @@ public:
     
 private:
     WiFiClient wifiClient;
+    WiFiClientSecure wifiClientSecure;
     PubSubClient mqttClient;
+    MQTTConnectionType connectionType;
     const char* server;
     int port;
     const char* clientId;
     const char* username;
     const char* password;
     std::string subscriptionTopic;
+    std::string wsPath;  // WebSocket path (e.g., "/mqtt")
     
     // Message processing
     std::queue<EventSchema> eventQueue;

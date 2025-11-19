@@ -1,7 +1,7 @@
 #include "MQTTPageBridge.h"
 #include <Arduino.h>
 
-MQTTPageBridge::MQTTPageBridge(MQTTAdapter& mqttAdapter, PageNavigator& pageNavigator)
+MQTTPageBridge::MQTTPageBridge(MQTTAdapterESP& mqttAdapter, PageNavigator& pageNavigator)
     : mqtt(mqttAdapter), pageNavigator(pageNavigator) {
 }
 

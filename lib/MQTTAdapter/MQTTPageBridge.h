@@ -1,5 +1,5 @@
 #pragma once
-#include "MQTTAdapter.h"
+#include "MQTTAdapterESP.h"  // Using ESP-IDF MQTT adapter
 #include <PageNavigator.h>
 #include <PageID.h>
 #include <map>
@@ -25,7 +25,7 @@ typedef std::function<void(const EventSchema&)> PagePayloadCallback;
  */
 class MQTTPageBridge {
 public:
-    MQTTPageBridge(MQTTAdapter& mqttAdapter, PageNavigator& pageNavigator);
+    MQTTPageBridge(MQTTAdapterESP& mqttAdapter, PageNavigator& pageNavigator);
     
     // Initialize the bridge and register MQTT callbacks
     void begin();
@@ -46,7 +46,7 @@ public:
     std::string getCurrentPageName();
     
 private:
-    MQTTAdapter& mqtt;
+    MQTTAdapterESP& mqtt;
     PageNavigator& pageNavigator;
     
     // Bidirectional mapping between event types and page IDs

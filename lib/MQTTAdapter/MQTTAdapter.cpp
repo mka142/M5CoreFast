@@ -3,15 +3,35 @@
 
 MQTTAdapter* MQTTAdapter::instance = nullptr;
 
-MQTTAdapter::MQTTAdapter(const char* server, int port, const char* clientId)
-    : server(server), port(port), clientId(clientId), 
-      mqttClient(wifiClient), eventCallback(nullptr), connectionCallback(nullptr),
-      username(nullptr), password(nullptr),
+MQTTAdapter::MQTTAdapter(const char* server, int port, const char* clientId, 
+                         MQTTConnectionType connType)
+    : server(server), port(port), clientId(clientId), connectionType(connType),
+      mqttClient(connType == MQTTConnectionType::TCP ? wifiClient : (Client&)wifiClientSecure),
+      eventCallback(nullptr), connectionCallback(nullptr),
+      username(nullptr), password(nullptr), wsPath("/mqtt"),
       lastReconnectAttempt(0), lastMessageTime(0), wasConnected(false) {
     instance = this;
+    
+    // Configure secure client for TLS/WSS
+    if (connectionType == MQTTConnectionType::TLS || connectionType == MQTTConnectionType::WSS) {
+        wifiClientSecure.setInsecure();  // Skip certificate validation (for testing)
+        // For production, use: wifiClientSecure.setCACert(ca_cert);
+    }
+    
     mqttClient.setServer(server, port);
     mqttClient.setCallback(messageCallback);
     mqttClient.setBufferSize(8192); // Increase buffer for larger JSON messages
+    
+    Serial.print("MQTT Adapter created - Type: ");
+    if (connectionType == MQTTConnectionType::TCP) Serial.println("TCP");
+    else if (connectionType == MQTTConnectionType::TLS) Serial.println("TLS");
+    else if (connectionType == MQTTConnectionType::WSS) Serial.println("WebSocket Secure (WSS)");
+}
+
+void MQTTAdapter::setWebSocketPath(const char* path) {
+    wsPath = std::string(path);
+    Serial.print("WebSocket path set to: ");
+    Serial.println(path);
 }
 
 void MQTTAdapter::begin(const char* username, const char* password) {
@@ -117,11 +137,11 @@ bool MQTTAdapter::parseEventSchema(const std::string& jsonString, EventSchema& e
     }
     
     // Extract required fields
-    if (!jsonDoc.containsKey("concertId") || 
-        !jsonDoc.containsKey("eventType") || 
-        !jsonDoc.containsKey("label") || 
-        !jsonDoc.containsKey("payload") || 
-        !jsonDoc.containsKey("position")) {
+    if (!jsonDoc["concertId"].is<const char*>() || 
+        !jsonDoc["eventType"].is<const char*>() || 
+        !jsonDoc["label"].is<const char*>() || 
+        !jsonDoc["payload"].is<JsonObject>() || 
+        !jsonDoc["position"].is<int>()) {
         Serial.println("Missing required fields in EventSchema");
         return false;
     }
@@ -147,8 +167,95 @@ EventSchema MQTTAdapter::getNextEvent() {
 }
 
 void MQTTAdapter::reconnect() {
-    Serial.print("Attempting MQTT connection...");
+    Serial.print("Attempting MQTT connection (");
+    if (connectionType == MQTTConnectionType::TCP) Serial.print("TCP");
+    else if (connectionType == MQTTConnectionType::TLS) Serial.print("TLS");
+    else if (connectionType == MQTTConnectionType::WSS) Serial.print("WSS");
+    Serial.print(")...");
     
+    // For WSS, we need to establish WebSocket connection first
+    if (connectionType == MQTTConnectionType::WSS) {
+        if (!wifiClientSecure.connected()) {
+            Serial.print("Connecting to WebSocket at ");
+            Serial.print(server);
+            Serial.print(":");
+            Serial.print(port);
+            Serial.print(wsPath.c_str());
+            Serial.print("...");
+            
+            if (!wifiClientSecure.connect(server, port)) {
+                Serial.println("WebSocket connection failed");
+                return;
+            }
+            
+            // Send WebSocket upgrade request
+            String request = "GET " + String(wsPath.c_str()) + " HTTP/1.1\r\n";
+            request += "Host: " + String(server) + "\r\n";
+            request += "Upgrade: websocket\r\n";
+            request += "Connection: Upgrade\r\n";
+            request += "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n";
+            request += "Sec-WebSocket-Protocol: mqtt\r\n";
+            request += "Sec-WebSocket-Version: 13\r\n\r\n";
+            
+            wifiClientSecure.print(request);
+            
+            // Wait for upgrade response (non-blocking)
+            unsigned long startTime = millis();
+            const unsigned long responseTimeout = 5000; // 5 seconds
+            
+            // Wait for data to be available
+            while (wifiClientSecure.available() == 0) {
+                if (millis() - startTime > responseTimeout) {
+                    Serial.println("WebSocket upgrade timeout");
+                    wifiClientSecure.stop();
+                    return;
+                }
+                // Non-blocking wait - just return and try again next loop
+                yield(); // Allow other tasks to run
+            }
+            
+            // Read HTTP response headers line by line
+            // We only need to verify "101 Switching Protocols" and consume the headers
+            // Stop reading when we hit the empty line (end of HTTP headers)
+            bool upgradeSuccess = false;
+            String line = "";
+            unsigned long readStartTime = millis();
+            const unsigned long readTimeout = 2000; // 2 seconds for reading response
+            
+            while (wifiClientSecure.available()) {
+                char c = wifiClientSecure.read();
+                if (c == '\n') {
+                    // Check if this is the status line with "101"
+                    if (line.indexOf("101") != -1) {
+                        upgradeSuccess = true;
+                    }
+                    // Empty line means end of HTTP headers
+                    if (line.length() <= 1) {  // \r or empty
+                        break;
+                    }
+                    line = "";
+                } else if (c != '\r') {
+                    line += c;
+                }
+                // Timeout protection
+                if (millis() - readStartTime > readTimeout) {
+                    Serial.println("WebSocket response timeout");
+                    wifiClientSecure.stop();
+                    return;
+                }
+            }
+            
+            if (!upgradeSuccess) {
+                Serial.println("WebSocket upgrade failed - no 101 response");
+                wifiClientSecure.stop();
+                return;
+            }
+            
+            Serial.println("WebSocket connected");
+        }
+    }
+    
+    // Now connect MQTT
     bool connected = false;
     if (username && password) {
         connected = mqttClient.connect(clientId, username, password);
@@ -157,14 +264,14 @@ void MQTTAdapter::reconnect() {
     }
     
     if (connected) {
-        Serial.println("connected");
+        Serial.println("MQTT connected");
         if (!subscriptionTopic.empty()) {
             mqttClient.subscribe(subscriptionTopic.c_str());
             Serial.print("Resubscribed to: ");
             Serial.println(subscriptionTopic.c_str());
         }
     } else {
-        Serial.print("failed, rc=");
+        Serial.print("MQTT connection failed, rc=");
         Serial.print(mqttClient.state());
         Serial.println(" will retry in 5 seconds");
     }
