@@ -1,6 +1,7 @@
 #include "FormFinishedPage.h"
 #include <polish_fonts.h>
 #include <ThemeColors.h>
+#include <RotatingNote.h>
 
 // Static member initialization
 lv_obj_t* FormFinishedPage::screen = nullptr;
@@ -25,7 +26,7 @@ lv_obj_t* FormFinishedPage::create() {
     
     // Main text label (white, 32pt) - positioned below note
     main_label = lv_label_create(screen);
-    lv_label_set_text(main_label, "Dziękujemy za udział\nw badaniu!");
+    lv_label_set_text(main_label, "Dziękujemy!");
     lv_obj_set_style_text_color(main_label, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_text_font(main_label, &montserrat_32_polish, 0);
     lv_obj_set_style_text_align(main_label, LV_TEXT_ALIGN_CENTER, 0);
