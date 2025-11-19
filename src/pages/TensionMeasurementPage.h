@@ -33,6 +33,28 @@ private:
     static float recording_phase;
     static void recordingLedTimer(lv_timer_t *timer);
     static lv_obj_t *recording_label;
+    // Small scalloped encoder tooth pieces (protruding from left edge)
+    static lv_obj_t *encoder_tooth_parts[3];
+    static lv_obj_t *encoder_tooth_reflection;
+    // Directional dot strips that flash when encoder is turned up/down
+    // Use a dense set of dots per side for a smooth ghost animation
+    static constexpr int ARROW_DOT_COUNT = 20; // adjust for density
+    static lv_obj_t *encoder_arrow_up_parts[ARROW_DOT_COUNT];
+    static lv_obj_t *encoder_arrow_down_parts[ARROW_DOT_COUNT];
+    static lv_timer_t *encoder_arrow_timer;
+    static float encoder_arrow_up_activity;
+    static float encoder_arrow_down_activity;
+    static float encoder_arrow_phase; // used to create pulsing during movement
+    static float encoder_arrow_progress_up; // propagation progress for up-side dots (front position)
+    static float encoder_arrow_progress_down; // propagation progress for down-side dots (front position)
+    static float encoder_arrow_target_idx; // target index based on bar edge
+    static int encoder_arrow_dir; // +1 up, -1 down, 0 idle
+    // Hold frames to delay tail contraction when motion changes or starts
+    static int encoder_arrow_hold_frames;
+    static constexpr int ARROW_HOLD_FRAMES = 4; // number of timer ticks to hold (≈4*60ms ≈ 240ms)
+    // Remember last tail length so contraction can be smoothed (slower than expansion)
+    static int encoder_arrow_last_tail_len;
+    static void encoderArrowTimer(lv_timer_t *timer);
     // Top-left illustrative knob removed; keep only recording LED + label on left
     static void momentumTimerCallback(lv_timer_t *timer);
     static void updateDisplay();
