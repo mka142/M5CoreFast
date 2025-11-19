@@ -8,6 +8,7 @@ lv_obj_t* OvationPage::dot2 = nullptr;
 lv_obj_t* OvationPage::dot3 = nullptr;
 int OvationPage::animation_step = 0;
 lv_timer_t* OvationPage::animation_timer = nullptr;
+EventSchema OvationPage::eventPayload = {};  // Initialize payload storage
 
 lv_obj_t* OvationPage::create() {
     // Create main screen
@@ -91,4 +92,30 @@ void OvationPage::setMessage(const char* message) {
     if (message_label) {
         lv_label_set_text(message_label, message);
     }
+}
+
+void OvationPage::setPayload(const EventSchema& payload) {
+    eventPayload = payload;
+    
+    // Update UI with payload data
+    if (!payload.payload.isNull() && payload.payload.containsKey("message")) {
+        const char* message = payload.payload["message"];
+        setMessage(message);
+    } else if (!payload.label.empty()) {
+        setMessage(payload.label.c_str());
+    } else {
+        setMessage("Owacja");
+    }
+    
+    Serial.println("=== OvationPage setPayload ===");
+    Serial.print("Concert ID: ");
+    Serial.println(payload.concertId.c_str());
+    Serial.print("Event Type: ");
+    Serial.println(payload.eventType.c_str());
+    Serial.print("Label: ");
+    Serial.println(payload.label.c_str());
+}
+
+const EventSchema& OvationPage::getPayload() {
+    return eventPayload;
 }

@@ -6,6 +6,7 @@ lv_obj_t* PieceAnnouncementPage::composer_label = nullptr;
 lv_obj_t* PieceAnnouncementPage::piece_label = nullptr;
 lv_obj_t* PieceAnnouncementPage::performers_label = nullptr;
 lv_obj_t* PieceAnnouncementPage::description_label = nullptr;
+EventSchema PieceAnnouncementPage::eventPayload = {};  // Initialize payload storage
 
 lv_obj_t* PieceAnnouncementPage::create() {
     // Create main screen
@@ -92,4 +93,62 @@ void PieceAnnouncementPage::setDescription(const char* description) {
     if (description_label) {
         lv_label_set_text(description_label, description);
     }
+}
+
+void PieceAnnouncementPage::setPayload(const EventSchema& payload) {
+    eventPayload = payload;
+    
+    // Extract data from payload
+    const JsonObject& data = payload.payload;
+    
+    if (!data.isNull()) {
+        // Update composer
+        if (data.containsKey("composerName")) {
+            setComposer(data["composerName"].as<const char*>());
+        } else {
+            setComposer("Kompozytor nieznany");
+        }
+        
+        // Update piece title
+        if (data.containsKey("pieceTitle")) {
+            setPiece(data["pieceTitle"].as<const char*>());
+        } else {
+            setPiece("Utwór nieznany");
+        }
+        
+        // Update performers
+        if (data.containsKey("performers")) {
+            setPerformers(data["performers"].as<const char*>());
+        } else {
+            setPerformers("");
+        }
+        
+        // Update description
+        if (data.containsKey("pieceDescription")) {
+            setDescription(data["pieceDescription"].as<const char*>());
+        } else {
+            setDescription("");
+        }
+    } else {
+        // No payload, use defaults
+        setComposer("Kompozytor nieznany");
+        setPiece("Utwór nieznany");
+        setPerformers("");
+        setDescription("");
+    }
+    
+    Serial.println("=== PieceAnnouncementPage setPayload ===");
+    Serial.print("Concert ID: ");
+    Serial.println(payload.concertId.c_str());
+    Serial.print("Event Type: ");
+    Serial.println(payload.eventType.c_str());
+    if (!data.isNull()) {
+        Serial.println("Payload contains:");
+        serializeJsonPretty(data, Serial);
+        Serial.println();
+    }
+}
+
+const EventSchema& PieceAnnouncementPage::getPayload() {
+    return eventPayload;
 }
