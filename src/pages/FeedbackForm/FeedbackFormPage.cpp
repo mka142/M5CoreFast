@@ -75,7 +75,7 @@ lv_obj_t* FeedbackFormPage::create() {
     if (!instance) {
         instance = new FeedbackFormPage();
     }
-    return instance->create_base(14);  // 14 total pages (0=intro, 1-13=questions)
+    return instance->create_base(13);  // 13 total pages (0=intro, 1-12=questions)
 }
 
 void FeedbackFormPage::cleanup() {
