@@ -53,6 +53,9 @@ public:
      * @brief Check if running
      */
     static bool isRunning() { return timer != nullptr; }
+
+    // Expose container for external event handling (e.g., touch-to-exit)
+    static lv_obj_t* getContainer() { return container; }
     
 private:
     // Mode-specific implementations

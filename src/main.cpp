@@ -40,8 +40,8 @@
 #include <MQTTPageBridge.h>
 
 // ==================== NETWORK CONFIGURATION ====================
-#define WIFI_SSID ""
-#define WIFI_PASSWORD ""
+#define WIFI_SSID "dive-riverbank-6912_60C0"
+#define WIFI_PASSWORD "VwpsmdTdzGfxyYqehwt8HuFtkZpXf3MC5qsQFnHSETtBo6Wfvb8hqwdn2RNi"
 #define NTP_TIMEZONE "UTC+2"
 #define NTP_SERVER1 "0.pool.ntp.org"
 #define NTP_SERVER2 "1.pool.ntp.org"
@@ -285,9 +285,10 @@ void setup()
 
     // Register screens with navigator
     Serial.println("15. Registering screens...");
-    navigator.registerScreen(SPONSORS, sponsorsScreen);
+
     navigator.registerScreen(LOADING, loadingScreen);
     navigator.registerScreen(BEFORE_CONCERT, beforeConcertScreen);
+    navigator.registerScreen(BEFORE_CONCERT__SPONSORS, sponsorsScreen); 
     navigator.registerScreen(APP_GUIDE, appGuideScreen);
     navigator.registerScreen(SLIDER_DEMO, sliderScreen);
     navigator.registerScreen(TENSION_MEASUREMENT, tensionScreen);
@@ -298,6 +299,8 @@ void setup()
     navigator.registerScreen(END_OF_CONCERT, endOfConcertScreen);
     navigator.registerScreen(END_OF_CONCERT__FEEDBACK_FORM, feedbackFormScreen);
     navigator.registerScreen(END_OF_CONCERT__FORM_FINISHED, formFinishedScreen);
+    navigator.registerScreen(SPONSORS, sponsorsScreen);
+
     Serial.println("16. Screens registered!");
 
     // Register page callbacks

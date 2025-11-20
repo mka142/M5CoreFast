@@ -18,6 +18,10 @@ public:
     static void update_text(lv_timer_t *timer);
     static void text_scale_anim_cb(void *var, int32_t value);
     
+    // Inactivity screensaver support
+    static lv_timer_t* inactivity_timer;
+    static void inactivity_cb(lv_timer_t* t);
+    static void resetInactivityTimer();
 private:
     static lv_obj_t *screen;
     static lv_obj_t *note_img;

@@ -24,6 +24,7 @@ int BeforeConcertPage::current_rotation = 0; // Start at 0°
 int BeforeConcertPage::text_index = 0;
 bool BeforeConcertPage::text_scaling_out = false;
 lv_anim_t BeforeConcertPage::text_anim;
+lv_timer_t* BeforeConcertPage::inactivity_timer = nullptr;
 
 // Header texts array
 const char *BeforeConcertPage::header_texts[] = {
@@ -132,12 +133,22 @@ void BeforeConcertPage::firstRender()
     rgb.setPixel(8, 0xFF, 0x00, 0xFF);
     rgb.setPixel(9, 0xFF, 0x00, 0xFF);
     rgb.show();
+
+    // Start or resume inactivity timer (4s default)
+    if (!inactivity_timer) {
+        inactivity_timer = lv_timer_create(inactivity_cb, 4000, NULL);
+    } else {
+        lv_timer_resume(inactivity_timer);
+    }
+    lv_timer_reset(inactivity_timer);
 }
 
 void BeforeConcertPage::lastRender()
 {
     // Turn off RGB LEDs when leaving the page
     rgb.setColor(0, 0, 0);
+    // Pause inactivity timer while not on this page
+    if (inactivity_timer) lv_timer_pause(inactivity_timer);
 }
 
 // Callback for smooth rotation animation
@@ -226,4 +237,17 @@ void BeforeConcertPage::cleanup()
     note_img = nullptr;
     header_label = nullptr;
     button = nullptr;
+}
+
+void BeforeConcertPage::inactivity_cb(lv_timer_t* t)
+{
+    // Show sponsors page in screensaver mode
+    Serial.println("BeforeConcertPage: inactivity timeout fired -> showing BEFORE_CONCERT__SPONSORS");
+    navigator.showPage(BEFORE_CONCERT__SPONSORS);
+    Serial.println("BeforeConcertPage: returned from navigator.showPage(BEFORE_CONCERT__SPONSORS)");
+}
+
+void BeforeConcertPage::resetInactivityTimer()
+{
+    if (inactivity_timer) lv_timer_reset(inactivity_timer);
 }

@@ -1,6 +1,11 @@
 #include "SponsorsPage.h"
 #include <SponsorCarousel.h>
 #include <ThemeColors.h>
+#include <PageNavigator.h>
+#include <PageID.h>
+
+// External navigator reference
+extern PageNavigator navigator;
 
 // Include sponsor logo images (will be created below)
 #include <images/sponsor_logos.h>
@@ -40,6 +45,40 @@ lv_obj_t* SponsorsPage::create() {
     
     // Start with shuffled order, then loop
     SponsorCarousel::start(3000, true);
+
+    // Also attach touch handlers to the carousel container itself, because
+    // images or other children may be on top and consume events.
+    lv_obj_t *carousel_container = SponsorCarousel::getContainer();
+    if (carousel_container) {
+        lv_obj_add_flag(carousel_container, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(carousel_container, [](lv_event_t* e){
+            if (navigator.getCurrentPage() == BEFORE_CONCERT__SPONSORS) {
+                navigator.showPage(BEFORE_CONCERT);
+            }
+        }, LV_EVENT_PRESSED, nullptr);
+        lv_obj_add_event_cb(carousel_container, [](lv_event_t* e){
+            if (navigator.getCurrentPage() == BEFORE_CONCERT__SPONSORS) {
+                navigator.showPage(BEFORE_CONCERT);
+            }
+        }, LV_EVENT_CLICKED, nullptr);
+    }
+
+    // If this screen is used as a screensaver, tapping should exit back to BEFORE_CONCERT
+    // Make both the full screen and the logo area respond to presses so touches are captured
+    lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(screen, [](lv_event_t* e){
+        if (navigator.getCurrentPage() == BEFORE_CONCERT__SPONSORS) {
+            navigator.showPage(BEFORE_CONCERT);
+        }
+    }, LV_EVENT_PRESSED, nullptr);
+
+    // Make the logo background area clickable and handle presses there too
+    lv_obj_add_flag(logo_bg, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(logo_bg, [](lv_event_t* e){
+        if (navigator.getCurrentPage() == BEFORE_CONCERT__SPONSORS) {
+            navigator.showPage(BEFORE_CONCERT);
+        }
+    }, LV_EVENT_PRESSED, nullptr);
     
     return screen;
 }
