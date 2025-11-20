@@ -1,331 +1,85 @@
-/**
- * @file SliderDemoPage.cpp
- * @brief Demo page with vertical fader slider using custom PNG graphics
- * 
- * Displays a professional fader control with:
- * - Vertical slider (1-10 range)
- * - Custom knob from fader PNG image (199x52 px)
- * - Scale with tick marks and numeric labels
- * - Large touch hitbox (100px) for accessibility
- */
-
 #include "SliderDemoPage.h"
 #include <polish_fonts.h>
-#include <images/fader_knob.h>
-#include <stdio.h>
-#include <math.h>
+#include <PageID.h>
+#include <PageNavigator.h>
+#include <Arduino.h>
+#include <RGBAdapter.h>
+
+// Declare external image
+LV_IMG_DECLARE(note);
+
+// External references (defined in main.cpp)
+extern PageNavigator navigator;
+extern RGBAdapter rgb;
 
 // Static member initialization
-lv_obj_t* SliderDemoPage::value_label = nullptr;
+lv_obj_t *SliderDemoPage::screen = nullptr;
+lv_obj_t *SliderDemoPage::button = nullptr;
 
-// Internal state - not exposed outside this file
-static lv_obj_t *slider_obj  = nullptr;  // Invisible slider widget (logic only)
-static lv_obj_t *knob_obj    = nullptr;  // PNG image for knob
-static lv_obj_t *scale_line  = nullptr;  // Vertical scale track
-static lv_timer_t *slider_timer = nullptr; // Timer for smooth continuous movement
-static int32_t target_value = -1;         // Target slider value (-1 = no target)
-static float current_position = 5.0f;     // Current fractional position
+lv_obj_t *SliderDemoPage::create()
+{
+    // Create screen with gradient background (0x9261D5 -> 0x42B2C2)
+    screen = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x9261D5), 0);
+    lv_obj_set_style_bg_grad_color(screen, lv_color_hex(0x42B2C2), 0);
+    lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_HOR, 0);
 
-// Forward declarations
-static void update_knob_pos();
-static void create_scale(lv_obj_t *parent);
-static void touch_event_cb(lv_event_t *e);
-static void release_event_cb(lv_event_t *e);
-static void slider_timer_cb(lv_timer_t *timer);
+    // Create title label
+    lv_obj_t *title_label = lv_label_create(screen);
+    lv_label_set_text(title_label, "Przetestuj suwak");
+    lv_obj_set_style_text_color(title_label, lv_color_hex(COLOR_WHITE), 0);
+    lv_obj_set_style_text_font(title_label, &montserrat_48_polish, 0);
+    lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(title_label, LV_ALIGN_CENTER, 0, -20);
+    lv_label_set_long_mode(title_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(title_label, 280);
 
-/*----------------------------------------------------------------------------*/
-/* Public API                                                                  */
-/*----------------------------------------------------------------------------*/
+    // Create gradient button at bottom
+    button = lv_button_create(screen);
+    lv_obj_set_size(button, 300, 50);
+    lv_obj_align(button, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_set_style_radius(button, 25, 0); // Rounded corners
 
-lv_obj_t* SliderDemoPage::create() {
-    // Create root screen with dark background
-    lv_obj_t *screen = lv_obj_create(nullptr);
-    lv_obj_remove_style_all(screen);
-    lv_obj_set_style_bg_color(screen, lv_color_hex(0x101010), 0);
-    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+    // Button gradient (0xFF4B4B -> 0xFA6737)
+    lv_obj_set_style_bg_color(button, lv_color_hex(0xFF4B4B), 0);
+    lv_obj_set_style_bg_grad_color(button, lv_color_hex(0xFA6737), 0);
+    lv_obj_set_style_bg_grad_dir(button, LV_GRAD_DIR_HOR, 0);
+    lv_obj_set_style_border_width(button, 0, 0);
+    lv_obj_set_style_shadow_width(button, 0, 0);
 
-    // Create scale first (sets scale_line for alignment)
-    create_scale(screen);
+    // Button label
+    lv_obj_t *button_label = lv_label_create(button);
+    lv_label_set_text(button_label, "Przetestuj");
+    lv_obj_set_style_text_color(button_label, lv_color_hex(COLOR_WHITE), 0);
+    lv_obj_set_style_text_font(button_label, &montserrat_20_polish, 0);
+    lv_obj_center(button_label);
 
-    // Create invisible slider widget for touch logic
-    // Full screen width for maximum touch sensitivity
-    slider_obj = lv_slider_create(screen);
-    lv_obj_remove_style_all(slider_obj);
-    lv_obj_set_size(slider_obj, 320, lv_obj_get_height(scale_line));
-    lv_obj_align_to(slider_obj, scale_line, LV_ALIGN_CENTER, 0, 0);
-    lv_slider_set_range(slider_obj, 1, 10);
-    lv_slider_set_value(slider_obj, 5, LV_ANIM_OFF);
-    lv_slider_set_orientation(slider_obj, LV_SLIDER_ORIENTATION_VERTICAL);
-    lv_obj_clear_flag(slider_obj, LV_OBJ_FLAG_SCROLLABLE);
-    
-    // Hide all slider parts (we use custom graphics)
-    lv_obj_set_style_bg_opa(slider_obj, LV_OPA_TRANSP, 
-                            LV_PART_MAIN | LV_PART_INDICATOR | LV_PART_KNOB);
-    lv_obj_set_style_border_opa(slider_obj, LV_OPA_TRANSP, LV_PART_MAIN);
-    
-    // Add touch events for gesture-based control
-    lv_obj_add_event_cb(slider_obj, touch_event_cb, LV_EVENT_PRESSED, nullptr);
-    lv_obj_add_event_cb(slider_obj, touch_event_cb, LV_EVENT_PRESSING, nullptr);
-    lv_obj_add_event_cb(slider_obj, release_event_cb, LV_EVENT_RELEASED, nullptr);
-
-    // Value label above scale
-    value_label = lv_label_create(screen);
-    lv_label_set_text(value_label, "5");
-    lv_obj_set_style_text_color(value_label, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_font(value_label, &montserrat_24_polish, 0);
-    lv_obj_align_to(value_label, scale_line, LV_ALIGN_OUT_TOP_MID, 0, -4);
-
-    // Custom knob from PNG image (199x52 px, ARGB8888 format)
-    knob_obj = lv_image_create(screen);
-    lv_image_set_src(knob_obj, &fader_knob);
-    
-    // Drop shadow for 3D effect
-    lv_obj_set_style_shadow_width(knob_obj, 8, 0);
-    lv_obj_set_style_shadow_color(knob_obj, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_shadow_ofs_y(knob_obj, 3, 0);
-    lv_obj_set_style_shadow_opa(knob_obj, 160, 0);
-    
-    // Position knob and bring to front
-    lv_obj_update_layout(scale_line);
-    update_knob_pos();
-    lv_obj_move_foreground(knob_obj);
-
-    // Register value change callback
-    lv_obj_add_event_cb(slider_obj, slider_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
-
-    // Create timer for smooth continuous slider movement (16ms ≈ 60 FPS)
-    slider_timer = lv_timer_create(slider_timer_cb, 16, nullptr);
-    
-    // Initialize position from current slider value
-    current_position = (float)lv_slider_get_value(slider_obj);
-    target_value = -1;
+    // Add button click event handler
+    lv_obj_add_event_cb(button, on_test_button_clicked, LV_EVENT_CLICKED, NULL);
 
     return screen;
 }
 
-void SliderDemoPage::slider_event_cb(lv_event_t *e) {
-    LV_UNUSED(e);
-    if (!slider_obj) return;
-    
-    int32_t value = lv_slider_get_value(slider_obj);
-    
-    // Update numeric label
-    if (value_label) {
-        char buf[8];
-        snprintf(buf, sizeof(buf), "%d", value);
-        lv_label_set_text(value_label, buf);
-    }
-    
-    // Update knob position
-    update_knob_pos();
+void SliderDemoPage::firstRender()
+{
+    // Turn off RGB LEDs
+    rgb.setColor(0, 0, 0);
 }
 
-void SliderDemoPage::cleanup() {
-    // Pause animation timer when leaving page
-    if (slider_timer) {
-        lv_timer_pause(slider_timer);
-    }
-    
-    // Reset animation state
-    target_value = -1;
+void SliderDemoPage::lastRender()
+{
+    // Turn off RGB LEDs when leaving the page
+    rgb.setColor(0, 0, 0);
 }
 
-void SliderDemoPage::resume() {
-    // Resume animation timer when returning to page
-    if (slider_timer) {
-        lv_timer_resume(slider_timer);
-    }
+void SliderDemoPage::on_test_button_clicked(lv_event_t *e)
+{
+    Serial.println("Test button clicked - navigating to SLIDER_DEMO__MEASUREMENT");
+    navigator.showPage(SLIDER_DEMO__MEASUREMENT);
 }
 
-// Global cleanup function for PageNavigator
-void sliderDemoPageCleanup() {
-    SliderDemoPage::cleanup();
-}
-
-// Global resume function for PageNavigator
-void sliderDemoPageResume() {
-    SliderDemoPage::resume();
-}
-
-/*----------------------------------------------------------------------------*/
-/* Internal helpers                                                            */
-/*----------------------------------------------------------------------------*/
-
-/**
- * @brief Handle touch events to set target position
- * 
- * Maps touch Y coordinate directly to slider value, then animates smoothly to that position
- */
-static void touch_event_cb(lv_event_t *e) {
-    if (!slider_obj || !scale_line) return;
-    
-    lv_indev_t *indev = lv_indev_active();
-    if (!indev) return;
-    
-    lv_point_t point;
-    lv_indev_get_point(indev, &point);
-    
-    // Get scale position and dimensions
-    const lv_coord_t line_y = lv_obj_get_y(scale_line);
-    const lv_coord_t line_h = lv_obj_get_height(scale_line);
-    const lv_coord_t top    = line_y;
-    const lv_coord_t bottom = line_y + line_h;
-    
-    // Check if touch is within vertical bounds of slider
-    if (point.y < top || point.y > bottom) return;
-    
-    // Map touch Y to slider value (inverted: top = max, bottom = min)
-    const int32_t vmin = lv_slider_get_min_value(slider_obj);
-    const int32_t vmax = lv_slider_get_max_value(slider_obj);
-    const float ratio = (float)(bottom - point.y) / (float)line_h;
-    const float target_pos = (float)vmin + (ratio * (float)(vmax - vmin));
-    
-    // Set target for smooth animation
-    target_value = (int32_t)(target_pos + 0.5f);
-    
-    // Clamp target to valid range
-    if (target_value < vmin) target_value = vmin;
-    if (target_value > vmax) target_value = vmax;
-}
-
-/**
- * @brief Handle touch release event
- */
-static void release_event_cb(lv_event_t *e) {
-    LV_UNUSED(e);
-    // Keep animating to target even after release
-}
-
-/**
- * @brief Timer callback for smooth slider animation
- * 
- * Called every 16ms (~60 FPS) to animate slider towards target position
- * Uses smooth easing for natural-looking movement
- */
-static void slider_timer_cb(lv_timer_t *timer) {
-    LV_UNUSED(timer);
-    
-    if (!slider_obj || target_value < 0) return;
-    
-    const int32_t vmin = lv_slider_get_min_value(slider_obj);
-    const int32_t vmax = lv_slider_get_max_value(slider_obj);
-    
-    // Calculate difference to target
-    const float diff = (float)target_value - current_position;
-    
-    // If close enough to target, snap to it and stop
-    if (fabsf(diff) < 0.05f) {
-        current_position = (float)target_value;
-        lv_slider_set_value(slider_obj, target_value, LV_ANIM_OFF);
-        target_value = -1;  // Stop animation
-        return;
-    }
-    
-    // Smooth easing - move 30% of remaining distance each frame
-    // Faster response for better tracking during finger movement
-    current_position += diff * 0.3f;
-    
-    // Update slider with rounded position
-    const int32_t rounded = (int32_t)(current_position + 0.5f);
-    const int32_t clamped = (rounded < vmin) ? vmin : (rounded > vmax) ? vmax : rounded;
-    
-    lv_slider_set_value(slider_obj, clamped, LV_ANIM_OFF);
-}
-
-/**
- * @brief Update knob position based on slider value
- * 
- * Maps slider value (1-10) to vertical position along scale.
- * Knob is centered horizontally on scale and positioned vertically
- * so its center aligns with the corresponding scale position.
- */
-static void update_knob_pos() {
-    if (!slider_obj || !knob_obj || !scale_line) return;
-
-    // Get current slider value and range
-    const int32_t v    = lv_slider_get_value(slider_obj);
-    const int32_t vmin = lv_slider_get_min_value(slider_obj);
-    const int32_t vmax = lv_slider_get_max_value(slider_obj);
-
-    // Get scale dimensions and position
-    const lv_coord_t line_x = lv_obj_get_x(scale_line);
-    const lv_coord_t line_y = lv_obj_get_y(scale_line);
-    const lv_coord_t line_h = lv_obj_get_height(scale_line);
-
-    // Calculate vertical position (0.0 = bottom, 1.0 = top)
-    const float ratio = (float)(v - vmin) / (float)(vmax - vmin);
-    const lv_coord_t bottom   = line_y + line_h;
-    const lv_coord_t center_y = bottom - (lv_coord_t)(ratio * line_h);
-
-    // Center knob horizontally on scale, vertically on value position
-    const lv_coord_t knob_w = lv_obj_get_width(knob_obj);
-    const lv_coord_t knob_h = lv_obj_get_height(knob_obj);
-    const lv_coord_t knob_x = line_x + lv_obj_get_width(scale_line) / 2 - knob_w / 2;
-    const lv_coord_t knob_y = center_y - knob_h / 2;
-
-    lv_obj_set_pos(knob_obj, knob_x, knob_y);
-}
-
-/**
- * @brief Create vertical scale with track, tick marks and labels
- * 
- * Creates:
- * - Vertical track (6x160 px, centered on screen)
- * - 10 level marks (small ticks on both sides)
- * - Numeric labels 1-10 (only on right side)
- * 
- * @param parent Parent LVGL object to attach scale to
- */
-static void create_scale(lv_obj_t *parent) {
-    constexpr lv_coord_t scale_height = 160;
-    constexpr lv_coord_t line_width   = 6;
-
-    // Create vertical track centered on screen
-    scale_line = lv_obj_create(parent);
-    lv_obj_remove_style_all(scale_line);
-    lv_obj_set_size(scale_line, line_width, scale_height);
-    lv_obj_set_style_bg_color(scale_line, lv_color_hex(0x505050), 0);
-    lv_obj_set_style_bg_opa(scale_line, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(scale_line, 3, 0);
-    lv_obj_center(scale_line);
-
-    // Force layout update to get valid coordinates
-    lv_obj_update_layout(scale_line);
-    const lv_coord_t line_x = lv_obj_get_x(scale_line);
-    const lv_coord_t line_y = lv_obj_get_y(scale_line);
-    const lv_coord_t bottom = line_y + scale_height;
-
-    constexpr int levels = 10;
-    constexpr int step   = scale_height / levels;
-
-    // Create tick marks and labels for each level (1-10)
-    for (int i = 1; i <= levels; ++i) {
-        const lv_coord_t tick_y = bottom - i * step;
-
-        // Left tick mark (small discrete line)
-        lv_obj_t *tick_left = lv_obj_create(parent);
-        lv_obj_remove_style_all(tick_left);
-        lv_obj_set_size(tick_left, 4, 1);
-        lv_obj_set_style_bg_color(tick_left, lv_color_hex(0x707070), 0);
-        lv_obj_set_style_bg_opa(tick_left, LV_OPA_COVER, 0);
-        lv_obj_set_pos(tick_left, line_x - 6, tick_y);
-
-        // Right tick mark (mirror of left)
-        lv_obj_t *tick_right = lv_obj_create(parent);
-        lv_obj_remove_style_all(tick_right);
-        lv_obj_set_size(tick_right, 4, 1);
-        lv_obj_set_style_bg_color(tick_right, lv_color_hex(0x707070), 0);
-        lv_obj_set_style_bg_opa(tick_right, LV_OPA_COVER, 0);
-        lv_obj_set_pos(tick_right, line_x + line_width + 2, tick_y);
-
-        // Numeric label (only on right side)
-        char buf[4];
-        snprintf(buf, sizeof(buf), "%d", i);
-        
-        lv_obj_t *lbl = lv_label_create(parent);
-        lv_label_set_text(lbl, buf);
-        lv_obj_set_style_text_color(lbl, lv_color_hex(0xCCCCCC), 0);
-        lv_obj_set_style_text_font(lbl, &montserrat_12_polish, 0);
-        lv_obj_set_pos(lbl, line_x + line_width + 8, tick_y - 6);
-    }
+void SliderDemoPage::cleanup()
+{
+    screen = nullptr;
+    button = nullptr;
 }
