@@ -54,9 +54,7 @@
 #define MQTT_WS_PATH "/mqtt" // WebSocket path on server
 #define USE_MQTT false       // Set to true to use MQTT, false to use HTTP polling
 
-// HTTP Polling Configuration
-#define EVENT_API_ENDPOINT "https://server.device-manager.fast.knakitm.pl/api/concert/currentEvent"
-#define POLL_INTERVAL_MS 5000  // Poll every 5 seconds
+
 
 // USER_ID is set at build time via deploy script
 // If not set, use a default value
@@ -75,12 +73,18 @@ const char *USER_ID_STR = TOSTRING(USER_ID);
 #define MQTT_TOPIC_EVENTS "events/broadcast"
 #define MQTT_TOPIC_STATUS "display/status"
 
+// HTTP Polling Configuration
+#define POLL_INTERVAL_MS 5000  // Poll every 5 seconds
+
 // Examination Form API Configuration
 const char *FORM_ID_RESEARCH = "concert-preexamination-form";
 const char *FORM_ID_FEEDBACK = "concert-feedback-form";
 const char *EXAM_FORM_SUBMIT_ENDPOINT = "https://server.device-manager.fast.knakitm.pl/api/examination-forms";
 const char *EXAM_FORM_GET_RESPONSE_ENDPOINT = "https://server.device-manager.fast.knakitm.pl/api/examination-forms/user";
 const char *FORM_BATCH_API_ENDPOINT = "https://server.device-manager.fast.knakitm.pl/api/forms/batch";
+
+// Event API endpoint (constructed at runtime with USER_ID)
+String EVENT_API_ENDPOINT;
 
 // Display resolution
 constexpr int32_t HOR_RES = 320;
@@ -141,6 +145,11 @@ void setup()
     Serial.println("================================");
     Serial.println("=== M5CoreFast LVGL ===");
     Serial.println("================================");
+
+    // Build EVENT_API_ENDPOINT with USER_ID
+    EVENT_API_ENDPOINT = String("https://server.device-manager.fast.knakitm.pl/api/concert/currentEvent?clientId=") + USER_ID_STR;
+    Serial.print("Event API Endpoint: ");
+    Serial.println(EVENT_API_ENDPOINT);
 
     // Initialize M5CoreS3
     Serial.println("1. Initializing M5CoreS3...");
@@ -388,7 +397,7 @@ void setup()
             lv_label_set_text(status_label, "Konfiguracja pollingu...");
             lv_task_handler();
             
-            eventPoller = new EventPoller(EVENT_API_ENDPOINT, POLL_INTERVAL_MS);
+            eventPoller = new EventPoller(EVENT_API_ENDPOINT.c_str(), POLL_INTERVAL_MS);
             eventPoller->begin();
             
             // Register event callback
