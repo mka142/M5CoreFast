@@ -58,24 +58,29 @@
 #define EVENT_API_ENDPOINT "https://server.device-manager.fast.knakitm.pl/api/concert/currentEvent"
 #define POLL_INTERVAL_MS 5000  // Poll every 5 seconds
 
-// DEVICE_ID is set at build time via deploy script
+// USER_ID is set at build time via deploy script
 // If not set, use a default value
-#ifndef DEVICE_ID
-#define DEVICE_ID "device_default"
+#ifndef USER_ID
+#define USER_ID user_default
 #endif
 
-// Convert macro to string for use in constructors
+// Convert macro to string - USER_ID comes without quotes from build system
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
-const char *MQTT_CLIENT_ID = TOSTRING(DEVICE_ID);
+const char *MQTT_CLIENT_ID = TOSTRING(USER_ID);
+const char *USER_ID_STR = TOSTRING(USER_ID);
 
 #define MQTT_USERNAME "your_username" // Optional
 #define MQTT_PASSWORD "your_password" // Optional
 #define MQTT_TOPIC_EVENTS "events/broadcast"
 #define MQTT_TOPIC_STATUS "display/status"
 
-// API Configuration
-#define FORM_API_HOST ""
+// Examination Form API Configuration
+const char *FORM_ID_RESEARCH = "concert-preexamination-form";
+const char *FORM_ID_FEEDBACK = "concert-feedback-form";
+const char *EXAM_FORM_SUBMIT_ENDPOINT = "https://server.device-manager.fast.knakitm.pl/api/examination-forms";
+const char *EXAM_FORM_GET_RESPONSE_ENDPOINT = "https://server.device-manager.fast.knakitm.pl/api/examination-forms/user";
+const char *FORM_BATCH_API_ENDPOINT = "https://server.device-manager.fast.knakitm.pl/api/forms/batch";
 
 // Display resolution
 constexpr int32_t HOR_RES = 320;
@@ -316,6 +321,9 @@ void setup()
     navigator.registerPageCallbacks(TENSION_MEASUREMENT,
                                    TensionMeasurementPage::firstRender,
                                    TensionMeasurementPage::lastRender);
+    navigator.registerPageCallbacks(END_OF_CONCERT,
+                                   EndOfConcertPage::firstRender,
+                                   EndOfConcertPage::lastRender);
 
     // ==================== INITIALIZE HTTP AND EVENT POLLING ====================
     if (!skip_network && wifi.isConnected())

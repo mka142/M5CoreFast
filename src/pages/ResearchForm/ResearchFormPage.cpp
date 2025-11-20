@@ -4,9 +4,15 @@
 #include <PageID.h>
 #include <PageNavigator.h>
 #include <ThemeColors.h>
+#include <HTTPAdapter.h>
+#include <ArduinoJson.h>
 
-// External page navigator reference (defined in main.cpp)
+// External references (defined in main.cpp)
 extern PageNavigator navigator;
+extern HTTPAdapter httpAdapter;
+extern const char *USER_ID_STR;
+extern const char *EXAM_FORM_SUBMIT_ENDPOINT;
+extern const char *FORM_ID_RESEARCH;
 
 // Static instance
 ResearchFormPage* ResearchFormPage::instance = nullptr;
@@ -163,56 +169,67 @@ void ResearchFormPage::on_form_submit() {
     Serial.println("Research Form submitted!");
     Serial.println("Creating JSON from answers...");
     
-    // Build JSON string
-    String json = "{\n";
-    bool first_item = true;
+    // Build answers JSON object
+    JsonDocument answersDoc;
     
     // Regular questions (pages 1-4)
     for (int page = 1; page <= 4; page++) {
         if (answers[page] >= 0) {
             Question *q = get_question(page);
             if (q) {
-                if (!first_item) json += ",\n";
-                json += "  \"" + String(q->key) + "\": \"" + String(q->options[answers[page]]) + "\"";
-                first_item = false;
+                answersDoc[q->key] = q->options[answers[page]];
             }
         }
     }
     
     // Feeling questions (pages 5-28) - nested object
-    json += ",\n  \"jak_się_czujesz\": {\n";
-    bool first_feeling = true;
+    JsonObject feelingsObj = answersDoc["jak_się_czujesz"].to<JsonObject>();
     for (int page = 5; page <= 28; page++) {
         if (answers[page] >= 0) {
             Question *q = get_question(page);
             if (q) {
-                if (!first_feeling) json += ",\n";
-                json += "    \"" + String(q->key) + "\": \"" + String(q->options[answers[page]]) + "\"";
-                first_feeling = false;
+                feelingsObj[q->key] = q->options[answers[page]];
             }
         }
     }
-    json += "\n  }";
     
     // Remaining questions (pages 29-31)
     for (int page = 29; page <= 31; page++) {
         if (answers[page] >= 0) {
             Question *q = get_question(page);
             if (q) {
-                json += ",\n";
-                json += "  \"" + String(q->key) + "\": \"" + String(q->options[answers[page]]) + "\"";
+                answersDoc[q->key] = q->options[answers[page]];
             }
         }
     }
     
-    json += "\n}";
+    // Build final submission JSON
+    JsonDocument submissionDoc;
+    submissionDoc["userId"] = USER_ID_STR;
+    submissionDoc["formId"] = FORM_ID_RESEARCH;
+    submissionDoc["answers"] = answersDoc;
+    
+    // Serialize to string
+    String jsonPayload;
+    serializeJson(submissionDoc, jsonPayload);
     
     // Print JSON to serial
-    Serial.println("\n=== RESEARCH FORM DATA ===");
-    Serial.println(json);
-    Serial.println("==========================\n");
+    Serial.println("\n=== RESEARCH FORM SUBMISSION ===");
+    Serial.println(jsonPayload);
+    Serial.println("================================\n");
     
-    // TODO: Send JSON via HTTP/MQTT
+    // Send JSON via HTTP POST
+    Serial.print("Submitting to: ");
+    Serial.println(EXAM_FORM_SUBMIT_ENDPOINT);
+    
+    int httpCode = httpAdapter.post(EXAM_FORM_SUBMIT_ENDPOINT, jsonPayload, "application/json");
+    
+    if (httpCode == 200 || httpCode == 201) {
+        Serial.println("Form submission successful!");
+    } else {
+        Serial.printf("Form submission failed with code: %d\n", httpCode);
+        // Continue anyway - don't block user
+    }
     
     // Navigate back to BEFORE_CONCERT page
     Serial.println("Navigating back to BEFORE_CONCERT");

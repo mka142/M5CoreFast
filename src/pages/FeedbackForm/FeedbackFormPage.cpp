@@ -4,9 +4,16 @@
 #include <PageID.h>
 #include <PageNavigator.h>
 #include <ThemeColors.h>
+#include <HTTPAdapter.h>
+#include <ArduinoJson.h>
 
-// External page navigator reference (defined in main.cpp)
+// External references (defined in main.cpp)
 extern PageNavigator navigator;
+extern HTTPAdapter httpAdapter;
+extern const char *USER_ID_STR;
+extern const char *EXAM_FORM_SUBMIT_ENDPOINT;
+extern const char *EXAM_FORM_GET_RESPONSE_ENDPOINT;
+extern const char *FORM_ID_FEEDBACK;
 
 // Static instance
 FeedbackFormPage* FeedbackFormPage::instance = nullptr;
@@ -50,7 +57,7 @@ static const char *tension_slider_options[] = {
     "w miarę łatwe",
     "trudne",
     "bardzo trudne",
-    "nie używałem/am\nsuwaka"
+    "nie używałem/am\npokrętła"
 };
 
 // Concert length options
@@ -163,53 +170,65 @@ void FeedbackFormPage::on_form_submit() {
     Serial.println("Feedback Form submitted!");
     Serial.println("Creating JSON from answers...");
     
-    // Build JSON string
-    String json = "{\n";
-    bool first_item = true;
+    // Build answers JSON object
+    JsonDocument answersDoc;
     
     // Overall experience (page 1)
     if (answers[1] >= 0) {
         Question *q = get_question(1);
         if (q) {
-            json += "  \"" + String(q->key) + "\": \"" + String(q->options[answers[1]]) + "\"";
-            first_item = false;
+            answersDoc[q->key] = q->options[answers[1]];
         }
     }
     
     // Emotional impact questions (pages 2-9) - nested object
-    json += ",\n  \"emotionalImpact\": {\n";
-    bool first_emotion = true;
+    JsonObject emotionalImpactObj = answersDoc["emotionalImpact"].to<JsonObject>();
     for (int page = 2; page <= 9; page++) {
         if (answers[page] >= 0) {
             Question *q = get_question(page);
             if (q) {
-                if (!first_emotion) json += ",\n";
-                json += "    \"" + String(q->key) + "\": \"" + String(q->options[answers[page]]) + "\"";
-                first_emotion = false;
+                emotionalImpactObj[q->key] = q->options[answers[page]];
             }
         }
     }
-    json += "\n  }";
     
     // Remaining questions (pages 10-12)
     for (int page = 10; page <= 12; page++) {
         if (answers[page] >= 0) {
             Question *q = get_question(page);
             if (q) {
-                json += ",\n";
-                json += "  \"" + String(q->key) + "\": \"" + String(q->options[answers[page]]) + "\"";
+                answersDoc[q->key] = q->options[answers[page]];
             }
         }
     }
     
-    json += "\n}";
+    // Build final submission JSON
+    JsonDocument submissionDoc;
+    submissionDoc["userId"] = USER_ID_STR;
+    submissionDoc["formId"] = FORM_ID_FEEDBACK;
+    submissionDoc["answers"] = answersDoc;
+    
+    // Serialize to string
+    String jsonPayload;
+    serializeJson(submissionDoc, jsonPayload);
     
     // Print JSON to serial
-    Serial.println("\n=== FEEDBACK FORM DATA ===");
-    Serial.println(json);
-    Serial.println("==========================\n");
+    Serial.println("\n=== FEEDBACK FORM SUBMISSION ===");
+    Serial.println(jsonPayload);
+    Serial.println("================================\n");
     
-    // TODO: Send JSON via HTTP/MQTT to different endpoint than research form
+    // Send JSON via HTTP POST
+    Serial.print("Submitting to: ");
+    Serial.println(EXAM_FORM_SUBMIT_ENDPOINT);
+    
+    int httpCode = httpAdapter.post(EXAM_FORM_SUBMIT_ENDPOINT, jsonPayload, "application/json");
+    
+    if (httpCode == 200 || httpCode == 201) {
+        Serial.println("Feedback form submission successful!");
+    } else {
+        Serial.printf("Feedback form submission failed with code: %d\n", httpCode);
+        // Continue anyway - don't block user
+    }
     
     // Navigate to form finished page
     Serial.println("Navigating to END_OF_CONCERT__FORM_FINISHED");
