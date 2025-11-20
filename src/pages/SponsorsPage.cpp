@@ -13,10 +13,10 @@ lv_obj_t* SponsorsPage::create() {
     lv_obj_set_style_bg_color(screen, lv_color_hex(0xFFFFFF), 0);
     
     // Title
-    lv_obj_t *title = lv_label_create(screen);
-    lv_label_set_text(title, "Sponsorzy");
-    lv_obj_set_style_text_color(title, lv_color_hex(0x000000), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
+    //lv_obj_t *title = lv_label_create(screen);
+    //lv_label_set_text(title, "");
+    //lv_obj_set_style_text_color(title, lv_color_hex(0x000000), 0);
+    //lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
     
     // Background panel for logo area
     lv_obj_t *logo_bg = lv_obj_create(screen);
