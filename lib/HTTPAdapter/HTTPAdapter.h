@@ -28,6 +28,10 @@ public:
     // Post JSON data asynchronously
     void postJSON(const char* url, const char* jsonPayload, HTTPResponseCallback callback = nullptr);
     
+    // Synchronous methods for simple requests
+    int get(const char* url);  // Returns HTTP status code
+    int post(const char* url, const String& payload, const char* contentType = "application/json");  // Returns HTTP status code
+    
     // Check if adapter is busy
     bool isBusy();
     

@@ -98,3 +98,40 @@ void HTTPAdapter::handleResponse(const HTTPResponse& response) {
         currentCallback = nullptr; // Clear callback after use
     }
 }
+
+// Synchronous GET request
+int HTTPAdapter::get(const char* url) {
+    Serial.print("HTTP GET: ");
+    Serial.println(url);
+    
+    HTTPClient client;
+    client.begin(url);
+    
+    int httpCode = client.GET();
+    
+    Serial.print("HTTP GET response code: ");
+    Serial.println(httpCode);
+    
+    client.end();
+    return httpCode;
+}
+
+// Synchronous POST request
+int HTTPAdapter::post(const char* url, const String& payload, const char* contentType) {
+    Serial.print("HTTP POST: ");
+    Serial.println(url);
+    Serial.print("Payload: ");
+    Serial.println(payload);
+    
+    HTTPClient client;
+    client.begin(url);
+    client.addHeader("Content-Type", contentType);
+    
+    int httpCode = client.POST(payload);
+    
+    Serial.print("HTTP POST response code: ");
+    Serial.println(httpCode);
+    
+    client.end();
+    return httpCode;
+}
