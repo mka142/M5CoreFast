@@ -40,8 +40,8 @@
 #include <MQTTPageBridge.h>
 
 // ==================== NETWORK CONFIGURATION ====================
-#define WIFI_SSID "dive-riverbank-6912_60C0"
-#define WIFI_PASSWORD "VwpsmdTdzGfxyYqehwt8HuFtkZpXf3MC5qsQFnHSETtBo6Wfvb8hqwdn2RNi"
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
 #define NTP_TIMEZONE "UTC+2"
 #define NTP_SERVER1 "0.pool.ntp.org"
 #define NTP_SERVER2 "1.pool.ntp.org"
