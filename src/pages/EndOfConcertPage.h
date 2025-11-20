@@ -5,6 +5,13 @@
 class EndOfConcertPage {
 public:
     static lv_obj_t* create();
+    static void firstRender();
+    static void lastRender();
+    
+    // Form submission checking
+    static bool checkFormSubmitted();
+    static void updateFormButtonState();
+    
     static void on_form_button_clicked(lv_event_t *e);
     
 private:

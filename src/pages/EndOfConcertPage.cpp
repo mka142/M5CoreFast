@@ -2,9 +2,14 @@
 #include <polish_fonts.h>
 #include <PageID.h>
 #include <PageNavigator.h>
+#include <HTTPAdapter.h>
 
-// External page navigator reference (defined in main.cpp)
+// External references (defined in main.cpp)
 extern PageNavigator navigator;
+extern HTTPAdapter httpAdapter;
+extern const char *USER_ID_STR;
+extern const char *EXAM_FORM_GET_RESPONSE_ENDPOINT;
+extern const char *FORM_ID_FEEDBACK;
 
 // Static member initialization
 lv_obj_t* EndOfConcertPage::screen = nullptr;
@@ -81,4 +86,65 @@ lv_obj_t* EndOfConcertPage::create() {
 void EndOfConcertPage::on_form_button_clicked(lv_event_t *e) {
     Serial.println("End of concert form button clicked - navigating to END_OF_CONCERT__FEEDBACK_FORM");
     navigator.showPage(END_OF_CONCERT__FEEDBACK_FORM);
+}
+
+void EndOfConcertPage::firstRender() {
+    // Check form submission status when page is shown
+    updateFormButtonState();
+}
+
+void EndOfConcertPage::lastRender() {
+    // Nothing to do on last render for this page
+}
+
+bool EndOfConcertPage::checkFormSubmitted() {
+    // Build URL with userId and formId query parameters
+    String url = String(EXAM_FORM_GET_RESPONSE_ENDPOINT);
+    url += "/";
+    url += USER_ID_STR;
+    url += "/form/";
+    url += FORM_ID_FEEDBACK;
+    
+    Serial.print("Checking feedback form submission status: ");
+    Serial.println(url);
+    
+    int httpCode = httpAdapter.get(url.c_str());
+    
+    if (httpCode == 200) {
+        Serial.println("Feedback form already submitted - navigating to form finished page");
+        // If form is already submitted, navigate directly to FormFinishedPage
+        navigator.showPage(END_OF_CONCERT__FORM_FINISHED);
+        return true;
+    } else {
+        Serial.printf("Feedback form not submitted (HTTP code: %d)\n", httpCode);
+        return false;
+    }
+}
+
+void EndOfConcertPage::updateFormButtonState() {
+    if (!button) return;
+    
+    bool formSubmitted = checkFormSubmitted();
+    
+    if (formSubmitted) {
+        // Form is submitted - navigation to FormFinishedPage already happened in checkFormSubmitted()
+        // Disable button anyway in case we return to this page
+        lv_obj_add_state(button, LV_STATE_DISABLED);
+        
+        // Change button text
+        lv_obj_t *button_label = lv_obj_get_child(button, 0);
+        if (button_label) {
+            lv_label_set_text(button_label, "Formularz wypełniony");
+        }
+        
+        // Change button color to gray
+        lv_obj_set_style_bg_color(button, lv_color_hex(0x808080), 0);
+        lv_obj_set_style_bg_grad_color(button, lv_color_hex(0x606060), 0);
+        
+        Serial.println("Feedback form button disabled - already submitted");
+    } else {
+        // Enable button (if it was disabled)
+        lv_obj_clear_state(button, LV_STATE_DISABLED);
+        Serial.println("Feedback form button enabled - not yet submitted");
+    }
 }

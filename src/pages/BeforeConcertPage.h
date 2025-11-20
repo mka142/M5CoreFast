@@ -10,6 +10,10 @@ public:
     static void lastRender();
     static void cleanup();
     
+    // Form submission checking
+    static bool checkFormSubmitted();
+    static void updateFormButtonState();
+    
     // Button callback
     static void on_form_button_clicked(lv_event_t *e);
     

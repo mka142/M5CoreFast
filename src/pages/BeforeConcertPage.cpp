@@ -4,15 +4,18 @@
 #include <PageNavigator.h>
 #include <Arduino.h>
 #include <RGBAdapter.h>
+#include <HTTPAdapter.h>
 
 // Declare external image
 LV_IMG_DECLARE(note);
 
-// External page navigator reference (defined in main.cpp)
+// External references (defined in main.cpp)
 extern PageNavigator navigator;
-
-// Access the global RGB adapter instance declared in main.cpp
 extern RGBAdapter rgb;
+extern HTTPAdapter httpAdapter;
+extern const char *USER_ID_STR;
+extern const char *EXAM_FORM_GET_RESPONSE_ENDPOINT;
+extern const char *FORM_ID_RESEARCH;
 
 // Static member initialization
 lv_obj_t *BeforeConcertPage::screen = nullptr;
@@ -141,6 +144,9 @@ void BeforeConcertPage::firstRender()
         lv_timer_resume(inactivity_timer);
     }
     lv_timer_reset(inactivity_timer);
+    
+    // Update button state based on form submission
+    updateFormButtonState();
 }
 
 void BeforeConcertPage::lastRender()
@@ -225,6 +231,57 @@ void BeforeConcertPage::on_form_button_clicked(lv_event_t *e)
 {
     Serial.println("Form button clicked - navigating to BEFORE_CONCERT__RESEARCH_FORM");
     navigator.showPage(BEFORE_CONCERT__RESEARCH_FORM);
+}
+
+bool BeforeConcertPage::checkFormSubmitted()
+{
+    // Build URL with userId and formId query parameters
+    String url = String(EXAM_FORM_GET_RESPONSE_ENDPOINT);
+    url += "/";
+    url += USER_ID_STR;
+    url += "/form/";
+    url += FORM_ID_RESEARCH;
+    
+    Serial.print("Checking form submission status: ");
+    Serial.println(url);
+    
+    int httpCode = httpAdapter.get(url.c_str());
+    
+    if (httpCode == 200) {
+        Serial.println("Form already submitted by this user");
+        return true;
+    } else {
+        Serial.printf("Form not submitted (HTTP code: %d)\n", httpCode);
+        return false;
+    }
+}
+
+void BeforeConcertPage::updateFormButtonState()
+{
+    if (!button) return;
+    
+    bool formSubmitted = checkFormSubmitted();
+    
+    if (formSubmitted) {
+        // Disable button and change appearance
+        lv_obj_add_state(button, LV_STATE_DISABLED);
+        
+        // Change button text
+        lv_obj_t *button_label = lv_obj_get_child(button, 0);
+        if (button_label) {
+            lv_label_set_text(button_label, "Formularz wypełniony");
+        }
+        
+        // Change button color to gray
+        lv_obj_set_style_bg_color(button, lv_color_hex(0x808080), 0);
+        lv_obj_set_style_bg_grad_color(button, lv_color_hex(0x606060), 0);
+        
+        Serial.println("Form button disabled - already submitted");
+    } else {
+        // Enable button (if it was disabled)
+        lv_obj_clear_state(button, LV_STATE_DISABLED);
+        Serial.println("Form button enabled - not yet submitted");
+    }
 }
 
 void BeforeConcertPage::cleanup()
