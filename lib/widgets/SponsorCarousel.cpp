@@ -35,7 +35,8 @@ void SponsorCarousel::init(lv_obj_t *parent, int x, int y, int w, int h) {
     container = lv_obj_create(parent);
     lv_obj_set_pos(container, x, y);
     lv_obj_set_size(container, w, h);
-    lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_bg_opa(container, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(container, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_border_width(container, 0, 0);
     lv_obj_set_style_pad_all(container, 0, 0);
     
