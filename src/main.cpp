@@ -11,6 +11,9 @@
 #include <PageNavigator.h>
 #include <PageID.h>
 
+// Polish fonts
+#include <polish_fonts.h>
+
 // Pages
 #include "pages/SponsorsPage.h"
 #include "pages/LoadingPage.h"
@@ -86,6 +89,8 @@ const char *FORM_BATCH_API_ENDPOINT = "https://server.device-manager.fast.knakit
 // Event API endpoint (constructed at runtime with USER_ID)
 String EVENT_API_ENDPOINT;
 
+String CHECK_USER_ID_VALID_ENDPOINT;
+
 // Display resolution
 constexpr int32_t HOR_RES = 320;
 constexpr int32_t VER_RES = 240;
@@ -151,6 +156,8 @@ void setup()
     Serial.print("Event API Endpoint: ");
     Serial.println(EVENT_API_ENDPOINT);
 
+    CHECK_USER_ID_VALID_ENDPOINT = String("https://server.device-manager.fast.knakitm.pl/api/user/validate/") + USER_ID_STR;
+
     // Initialize M5CoreS3
     Serial.println("1. Initializing M5CoreS3...");
     auto cfg = M5.config();
@@ -176,6 +183,7 @@ void setup()
 
     lv_obj_t *status_label = lv_label_create(status_screen);
     lv_obj_set_style_text_color(status_label, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_font(status_label, &montserrat_14_polish, 0);  // Use Polish font
     lv_obj_set_width(status_label, 280);
     lv_label_set_long_mode(status_label, LV_LABEL_LONG_WRAP);
     lv_obj_align(status_label, LV_ALIGN_CENTER, 0, 0);
@@ -346,6 +354,67 @@ void setup()
         lv_task_handler();
         httpAdapter.begin();
         Serial.println("18. HTTP adapter initialized!");
+
+        // ==================== VALIDATE USER ID ====================
+        Serial.println("18a. Validating USER_ID...");
+        Serial.print("Validation endpoint: ");
+        Serial.println(CHECK_USER_ID_VALID_ENDPOINT);
+        lv_label_set_text(status_label, "Inicjalizacja...\n\nWalidacja użytkownika...");
+        lv_task_handler();
+
+        int validationStatusCode = 0;
+        String validationResponse = httpAdapter.getWithResponse(CHECK_USER_ID_VALID_ENDPOINT.c_str(), &validationStatusCode);
+        bool userValid = false;
+        String errorMessage = "Nieznany błąd";
+
+        if (validationStatusCode == 200 && validationResponse.length() > 0) {
+            // Parse JSON response
+            DynamicJsonDocument doc(1024);
+            DeserializationError error = deserializeJson(doc, validationResponse);
+
+            if (!error) {
+                if (doc.containsKey("success")) {
+                    userValid = doc["success"].as<bool>();
+                    
+                    if (userValid) {
+                        Serial.println("✓ User validation successful!");
+                        lv_label_set_text(status_label, "Inicjalizacja...\n\nUżytkownik zainicjalizowany");
+                        rgb.setColor(0, 50, 0); // Green for success
+                    } else {
+                        Serial.println("✗ User validation failed - success: false");
+                        errorMessage = "Błąd inicializacji użytkownika";
+                        lv_label_set_text(status_label, "Inicjalizacja...\n\nBłąd inicializacji użytkownika");
+                        rgb.setColor(50, 0, 0); // Red for failure
+                    }
+                } else {
+                    Serial.println("✗ User validation failed - no 'success' field");
+                    errorMessage = "Nieprawidłowa odpowiedź serwera";
+                    lv_label_set_text(status_label, "Inicjalizacja...\n\nBłąd inicializacji użytkownika\n(nieprawidłowa odpowiedź)");
+                    rgb.setColor(50, 0, 0); // Red for failure
+                }
+            } else {
+                Serial.print("✗ User validation failed - JSON parse error: ");
+                Serial.println(error.c_str());
+                errorMessage = "Błąd parsowania odpowiedzi";
+                lv_label_set_text(status_label, "Inicjalizacja...\n\nBłąd inicializacji użytkownika\n(błąd parsowania)");
+                rgb.setColor(50, 0, 0); // Red for failure
+            }
+        } else {
+            Serial.printf("✗ User validation failed - HTTP %d\n", validationStatusCode);
+            errorMessage = "Błąd połączenia";
+            char errorText[128];
+            snprintf(errorText, sizeof(errorText), 
+                     "Inicjalizacja...\n\nBłąd inicializacji użytkownika\n(HTTP %d)", 
+                     validationStatusCode);
+            lv_label_set_text(status_label, errorText);
+            rgb.setColor(50, 0, 0); // Red for failure
+        }
+
+        lv_task_handler();
+        delay(2000); // Show validation result for 2 seconds
+
+        Serial.println("18b. User validation complete!");
+        rgb.setColor(0, 0, 0); // Reset RGB
 
         if (USE_MQTT) {
             // MQTT initialization (currently disabled due to TLS issues)
