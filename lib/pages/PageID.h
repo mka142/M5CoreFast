@@ -13,6 +13,7 @@ enum PageID
     //
     APP_GUIDE,
     SLIDER_DEMO,
+    SLIDER_DEMO__MEASUREMENT,         // Tension measurement demo (sub-page of SLIDER_DEMO)
     CONCERT_START,
     PIECE_ANNOUNCEMENT,
     TENSION_MEASUREMENT,
