@@ -8,9 +8,21 @@ Each device gets a unique USER_ID defined at compile time.
 Usage:
     ./deploy.py list                    - List all connected M5Stack devices
     ./deploy.py build                   - Build firmware for m5stack-cores3
-    ./deploy.py upload                  - Upload to all devices (auto ID: user_001, user_002, ...)
-    ./deploy.py upload /dev/ttyACM0     - Upload to specific device (auto ID)
+    ./deploy.py upload                  - Upload to all devices with auto IDs
+    ./deploy.py upload /dev/ttyACM0     - Upload to specific device
     ./deploy.py upload /dev/ttyACM0 myuser  - Upload with custom user ID
+    ./deploy.py upload user1,user2,user3    - Upload to all devices
+                                             with specified user IDs
+    ./deploy.py upload /dev/ttyACM0,/dev/ttyACM1 user1,user2
+                                           - Upload to specific devices
+                                             with specified IDs
+
+Examples:
+    # Upload to all detected devices with custom IDs
+    ./deploy.py upload id001,id002,id003
+    
+    # Upload to specific devices with custom IDs
+    ./deploy.py upload /dev/ttyACM0,/dev/ttyACM1 alice,bob
 """
 
 import subprocess
@@ -210,6 +222,45 @@ def upload_all():
     return fail_count == 0
 
 
+def upload_multiple_with_ids(devices, user_ids):
+    """Upload firmware to multiple devices with specified user IDs"""
+    if len(user_ids) != len(devices):
+        print_error(f"Mismatch: {len(devices)} device(s) but "
+                   f"{len(user_ids)} user ID(s)")
+        print_info("Please provide one user ID per device")
+        return False
+    
+    print_info(f"Uploading to {len(devices)} device(s) with custom IDs...")
+    
+    success_count = 0
+    fail_count = 0
+    
+    for device, user_id in zip(devices, user_ids):
+        if upload_to_device(device, user_id):
+            success_count += 1
+        else:
+            fail_count += 1
+        
+        # Small delay between uploads
+        if device != devices[-1]:
+            time.sleep(1)
+    
+    print("\n" + "="*50)
+    print_info(f"Upload complete: {success_count} success, "
+               f"{fail_count} failed")
+    
+    return fail_count == 0
+
+
+def parse_comma_separated(arg):
+    """Parse comma-separated values, removing quotes and whitespace"""
+    # Remove quotes if present
+    arg = arg.strip('\'"')
+    # Split by comma and clean each item
+    items = [item.strip().strip('\'"') for item in arg.split(',')]
+    return [item for item in items if item]  # Remove empty strings
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -225,17 +276,80 @@ def main():
         sys.exit(0 if success else 1)
     
     elif command == 'upload':
-        # Check if specific device is provided
-        if len(sys.argv) > 2:
-            device = sys.argv[2]
-            if not os.path.exists(device):
-                print_error(f"Device {device} not found!")
-                sys.exit(1)
-            # Optional: custom user ID as third argument
-            user_id = sys.argv[3] if len(sys.argv) > 3 else None
-            success = upload_to_device(device, user_id)
-        else:
+        # Parse arguments
+        if len(sys.argv) == 2:
+            # No arguments: upload to all detected devices with auto IDs
             success = upload_all()
+        elif len(sys.argv) == 3:
+            arg = sys.argv[2]
+            
+            # Check if it's a device path or comma-separated user IDs
+            if ',' in arg and not arg.startswith('/dev/'):
+                # Comma-separated user IDs: upload to all detected devices
+                user_ids = parse_comma_separated(arg)
+                devices = detect_m5_devices()
+                
+                if not devices:
+                    print_error("No devices found!")
+                    sys.exit(1)
+                
+                success = upload_multiple_with_ids(devices, user_ids)
+            elif arg.startswith('/dev/') or os.path.exists(arg):
+                # Single device path
+                if ',' in arg:
+                    # Multiple devices
+                    devices = parse_comma_separated(arg)
+                    # Validate all devices exist
+                    for device in devices:
+                        if not os.path.exists(device):
+                            print_error(f"Device {device} not found!")
+                            sys.exit(1)
+                    # Upload with auto IDs
+                    user_ids = [f"user_{i:03d}" for i in range(1, len(devices) + 1)]
+                    success = upload_multiple_with_ids(devices, user_ids)
+                else:
+                    # Single device with auto ID
+                    success = upload_to_device(arg, None)
+            else:
+                # Assume it's a single user ID for first detected device
+                devices = detect_m5_devices()
+                if not devices:
+                    print_error("No devices found!")
+                    sys.exit(1)
+                success = upload_to_device(devices[0], arg)
+        
+        elif len(sys.argv) == 4:
+            # Two arguments: devices and user IDs
+            devices_arg = sys.argv[2]
+            user_ids_arg = sys.argv[3]
+            
+            # Parse devices
+            if ',' in devices_arg:
+                devices = parse_comma_separated(devices_arg)
+            elif os.path.exists(devices_arg):
+                devices = [devices_arg]
+            else:
+                print_error(f"Device {devices_arg} not found!")
+                sys.exit(1)
+            
+            # Validate all devices exist
+            for device in devices:
+                if not os.path.exists(device):
+                    print_error(f"Device {device} not found!")
+                    sys.exit(1)
+            
+            # Parse user IDs
+            if ',' in user_ids_arg:
+                user_ids = parse_comma_separated(user_ids_arg)
+            else:
+                user_ids = [user_ids_arg]
+            
+            success = upload_multiple_with_ids(devices, user_ids)
+        
+        else:
+            print_error("Too many arguments!")
+            print(__doc__)
+            sys.exit(1)
         
         sys.exit(0 if success else 1)
     
