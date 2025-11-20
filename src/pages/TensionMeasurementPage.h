@@ -1,6 +1,15 @@
 #pragma once
 #include <lvgl.h>
 #include <ThemeColors.h>
+#include <vector>
+#include <ArduinoJson.h>
+#include <MQTTCommon.h>  // For EventSchema
+
+// Structure for buffered tension data
+struct TensionRecord {
+    unsigned long long timestamp;  // Unix timestamp in milliseconds
+    int value;                     // Tension value 0-100
+};
 
 // Tension measurement page with vertical bar widget
 class TensionMeasurementPage {
@@ -13,6 +22,16 @@ public:
     static void handleEncoder(int delta);
     static int getCurrentValue();
     static void cleanup();  // For momentum timer
+    
+    // Payload methods for MQTT/HTTP integration
+    static void setPayload(const EventSchema& payload);
+    static const EventSchema& getPayload();
+    
+    // Data collection and submission
+    static void recordTensionValue();
+    static void sendBufferedData();
+    static void clearBuffer();
+    static bool isDemoMode();
     
 private:
     static lv_obj_t *bar_obj;
@@ -94,4 +113,15 @@ private:
     static constexpr float BRAKE_ALPHA = 0.07f;       // gentler per-tick braking (less abrupt)
     static constexpr float STOP_VELOCITY = 0.35f;     // snap to zero below this velocity (snap later)
     // no animation state
+    
+    // Data buffering for tension measurement
+    static std::vector<TensionRecord> tension_buffer;
+    static unsigned long last_record_time;  // Track last record timestamp for rate limiting
+    static constexpr unsigned long RECORD_INTERVAL_MS = 100;  // Record every 100ms when encoder is active
+    static constexpr size_t MAX_BUFFER_SIZE = 200;            // Send after 200 records
+    static bool is_demo_mode;  // True for SLIDER_DEMO__MEASUREMENT, false for TENSION_MEASUREMENT
+    
+    // Payload storage
+    static EventSchema eventPayload;  // Holds event data (contains pieceId for concert mode)
+    static String stored_piece_id;    // Captured pieceId at firstRender, preserved until lastRender
 };

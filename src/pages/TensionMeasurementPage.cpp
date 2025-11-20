@@ -4,9 +4,18 @@
 #include <stdio.h>
 #include <cmath>
 #include <RGBAdapter.h>
+#include <HTTPAdapter.h>
+#include <PageNavigator.h>
+#include <RTCAdapter.h>
+#include <PageID.h>
 
-// Access the global RGB adapter instance declared in main.cpp
+// External references (defined in main.cpp)
 extern RGBAdapter rgb;
+extern HTTPAdapter httpAdapter;
+extern PageNavigator navigator;
+extern RTCAdapter rtc;
+extern const char *USER_ID_STR;
+extern const char *FORM_BATCH_API_ENDPOINT;
 
 lv_obj_t* TensionMeasurementPage::bar_obj = nullptr;
 lv_obj_t* TensionMeasurementPage::center_line = nullptr;
@@ -46,6 +55,13 @@ int TensionMeasurementPage::encoder_arrow_dir = 0;
 int TensionMeasurementPage::encoder_arrow_hold_frames = 0;
 int TensionMeasurementPage::encoder_arrow_last_tail_len = 0;
 // Top-left knob removed; no related static objects
+
+// Data buffering static members
+std::vector<TensionRecord> TensionMeasurementPage::tension_buffer;
+unsigned long TensionMeasurementPage::last_record_time = 0;
+bool TensionMeasurementPage::is_demo_mode = false;
+EventSchema TensionMeasurementPage::eventPayload;
+String TensionMeasurementPage::stored_piece_id = "";
 
 lv_obj_t* TensionMeasurementPage::create() {
     // Create screen - czarne tło
@@ -166,7 +182,7 @@ lv_obj_t* TensionMeasurementPage::create() {
     // mechanical encoder. This uses three overlapping circle pieces so we don't need an image.
     if (encoder_tooth_parts[0] == nullptr) {
         const int part_size = 8;
-        // reduce spacing and start higher so the scallop sits nearer the top-left edge
+        // reduce spacing and start higher so the scallop sits nearer to the top-left edge
         const int spacing = 5;
         for (int i = 0; i < 3; ++i) {
             encoder_tooth_parts[i] = lv_obj_create(screen);
@@ -239,10 +255,48 @@ lv_obj_t* TensionMeasurementPage::create() {
 void TensionMeasurementPage::firstRender() {
     // Turn off RGB LEDs initially for tension measurement page
     rgb.setColor(0, 0, 0);
+    
+    // Reset bar position to 0 for each new piece
+    current_position = 0.0f;
+    velocity = 0.0f;
+    wave_amplitude = 0.0f;
+    wave_phase = 0.0f;
+    breakaway_accumulator = 0.0f;
+    input_activity = 0.0f;
+    if (bar_obj) {
+        lv_bar_set_value(bar_obj, 0, LV_ANIM_OFF);
+    }
+    Serial.println("Bar position reset to 0");
+    
+    // Determine mode based on current page
+    PageID currentPage = navigator.getCurrentPage();
+    is_demo_mode = (currentPage == SLIDER_DEMO__MEASUREMENT);
+    
+    // Clear buffer and reset timestamp
+    tension_buffer.clear();
+    tension_buffer.reserve(MAX_BUFFER_SIZE);
+    last_record_time = 0;  // Reset timestamp to allow immediate first record
+    
+    // Capture pieceId from eventPayload at the start (before it can be overwritten)
+    stored_piece_id = "unknown";  // Default value
+    if (!eventPayload.payload.isNull() && eventPayload.payload.containsKey("pieceId")) {
+        stored_piece_id = eventPayload.payload["pieceId"].as<String>();
+        Serial.printf("Captured pieceId for this session: %s\n", stored_piece_id.c_str());
+    }
+    
+    Serial.println(is_demo_mode ? "=== TensionMeasurement DEMO mode ===" : "=== TensionMeasurement CONCERT mode ===");
 }
 
 void TensionMeasurementPage::lastRender() {
-    // No special cleanup needed
+    // Send any remaining buffered data before leaving
+    if (tension_buffer.size() > 0) {
+        Serial.printf("Sending %d remaining tension records...\n", tension_buffer.size());
+        sendBufferedData();
+    }
+    
+    // Clear stored pieceId after sending data
+    stored_piece_id = "";
+    Serial.println("Cleared stored pieceId");
 }
 
 
@@ -368,6 +422,9 @@ void TensionMeasurementPage::handleEncoder(int delta) {
             }
         }
     }
+    
+    // Record tension value (rate-limited internally)
+    recordTensionValue();
 }
 
 // Short encoder-driven animation was removed per user request to restore previous behavior
@@ -717,4 +774,111 @@ void TensionMeasurementPage::cleanup() {
             encoder_arrow_down_parts[p] = nullptr;
         }
     }
+}
+
+// ==================== PAYLOAD MANAGEMENT ====================
+
+void TensionMeasurementPage::setPayload(const EventSchema& payload) {
+    eventPayload = payload;
+    Serial.println("TensionMeasurementPage payload set");
+    if (!payload.payload.isNull() && payload.payload.containsKey("pieceId")) {
+        Serial.print("Piece ID: ");
+        Serial.println(payload.payload["pieceId"].as<String>());
+    }
+}
+
+const EventSchema& TensionMeasurementPage::getPayload() {
+    return eventPayload;
+}
+
+// ==================== DATA COLLECTION AND SUBMISSION ====================
+
+void TensionMeasurementPage::recordTensionValue() {
+    unsigned long now = millis();
+    
+    // Check if enough time has passed since last record (rate limiting)
+    if (now - last_record_time < RECORD_INTERVAL_MS) {
+        return;  // Too soon, skip recording
+    }
+    
+    last_record_time = now;
+    
+    // Get current value and scale from 0-300 to 0-100
+    int raw_value = getCurrentValue();  // 0-300
+    int scaled_value = (raw_value * 100) / 300;  // 0-100
+    
+    // Get timestamp (Unix milliseconds)
+    unsigned long long timestamp = rtc.getUnixTimestampMs();
+    
+    // Create and store record
+    TensionRecord record;
+    record.timestamp = timestamp;
+    record.value = scaled_value;
+    
+    tension_buffer.push_back(record);
+    
+    Serial.printf("[TensionRecord] t=%llu, v=%d (raw=%d)\n", timestamp, scaled_value, raw_value);
+    
+    // Send if buffer is full
+    if (tension_buffer.size() >= MAX_BUFFER_SIZE) {
+        Serial.println("Buffer full - sending data");
+        sendBufferedData();
+    }
+}
+
+void TensionMeasurementPage::sendBufferedData() {
+    if (tension_buffer.empty()) {
+        Serial.println("No tension data to send");
+        return;
+    }
+
+    // Build JSON payload
+    DynamicJsonDocument doc(8192);  // Use dynamic document to avoid deprecation warnings
+    doc["clientId"] = USER_ID_STR;  // Use clientId instead of userId
+
+    // Use stored pieceId (captured in firstRender, preserved across payload changes)
+    doc["pieceId"] = stored_piece_id;
+
+    // Add tension data array
+    JsonArray dataArray = doc["data"].to<JsonArray>();
+    for (const auto& record : tension_buffer) {
+        JsonObject recordObj = dataArray.createNestedObject();
+        recordObj["t"] = record.timestamp;
+        recordObj["v"] = record.value;
+    }
+
+    // Serialize to string
+    String jsonPayload;
+    serializeJson(doc, jsonPayload);
+
+    Serial.println("\n=== TENSION DATA SUBMISSION ===");
+    Serial.printf("Records: %d\n", tension_buffer.size());
+    Serial.printf("Mode: %s\n", is_demo_mode ? "DEMO" : "CONCERT");
+    Serial.printf("Piece ID: %s\n", stored_piece_id.c_str());
+    Serial.println(jsonPayload);
+    Serial.println("===============================\n");
+
+    // Send via HTTP POST
+    Serial.print("Submitting to: ");
+    Serial.println(FORM_BATCH_API_ENDPOINT);
+
+    int httpCode = httpAdapter.post(FORM_BATCH_API_ENDPOINT, jsonPayload, "application/json");
+
+    if (httpCode == 200 || httpCode == 201) {
+        Serial.println("Tension data submission successful!");
+        clearBuffer();
+    } else {
+        Serial.printf("Tension data submission failed with code: %d\n", httpCode);
+        // Clear buffer anyway to avoid re-sending bad data
+        clearBuffer();
+    }
+}
+
+void TensionMeasurementPage::clearBuffer() {
+    tension_buffer.clear();
+    Serial.println("Tension buffer cleared");
+}
+
+bool TensionMeasurementPage::isDemoMode() {
+    return is_demo_mode;
 }
