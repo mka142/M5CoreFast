@@ -3,14 +3,14 @@
 M5Stack CoreS3 Multi-Device Deployment Tool
 
 Simple tool to detect, build, and upload firmware to multiple M5Stack devices.
-Each device gets a unique DEVICE_ID defined at compile time.
+Each device gets a unique USER_ID defined at compile time.
 
 Usage:
     ./deploy.py list                    - List all connected M5Stack devices
     ./deploy.py build                   - Build firmware for m5stack-cores3
-    ./deploy.py upload                  - Upload to all devices (auto ID: device_001, device_002, ...)
+    ./deploy.py upload                  - Upload to all devices (auto ID: user_001, user_002, ...)
     ./deploy.py upload /dev/ttyACM0     - Upload to specific device (auto ID)
-    ./deploy.py upload /dev/ttyACM0 mydevice  - Upload with custom device ID
+    ./deploy.py upload /dev/ttyACM0 myuser  - Upload with custom user ID
 """
 
 import subprocess
@@ -131,10 +131,10 @@ def build_firmware():
         print_error(f"Build error: {e}")
         return False
 
-def upload_to_device(device, device_id=None):
+def upload_to_device(device, user_id=None):
     """Upload firmware to a specific device"""
-    device_name = device_id if device_id else device.split('/')[-1]
-    print_info(f"Uploading to {device} (ID: {device_name})...")
+    device_name = user_id if user_id else device.split('/')[-1]
+    print_info(f"Uploading to {device} (User ID: {device_name})...")
     
     pio_cmd = find_platformio()
     if not pio_cmd:
@@ -144,15 +144,15 @@ def upload_to_device(device, device_id=None):
     project_root = get_project_root()
     os.chdir(project_root)
     
-    # Build command with optional device ID
+    # Build command with optional user ID
     cmd = [pio_cmd, 'run', '--target', 'upload',
            '--environment', 'm5stack-cores3',
            '--upload-port', device]
     
-    # Add device ID as environment variable if provided
+    # Add user ID as environment variable if provided
     env = os.environ.copy()
-    if device_id:
-        env['PLATFORMIO_BUILD_FLAGS'] = f'-D DEVICE_ID=\\"{device_id}\\"'
+    if user_id:
+        env['PLATFORMIO_BUILD_FLAGS'] = f'-D USER_ID={user_id}'
     
     try:
         result = subprocess.run(
@@ -163,7 +163,7 @@ def upload_to_device(device, device_id=None):
         )
         
         if result.returncode == 0:
-            print_success(f"Upload to {device} (ID: {device_name}) "
+            print_success(f"Upload to {device} (User ID: {device_name}) "
                          "successful!")
             return True
         else:
@@ -191,10 +191,10 @@ def upload_all():
     success_count = 0
     fail_count = 0
     
-    # Generate device IDs (device_001, device_002, etc.)
+    # Generate user IDs (user_001, user_002, etc.)
     for idx, device in enumerate(devices, 1):
-        device_id = f"device_{idx:03d}"
-        if upload_to_device(device, device_id):
+        user_id = f"user_{idx:03d}"
+        if upload_to_device(device, user_id):
             success_count += 1
         else:
             fail_count += 1
@@ -231,9 +231,9 @@ def main():
             if not os.path.exists(device):
                 print_error(f"Device {device} not found!")
                 sys.exit(1)
-            # Optional: custom device ID as third argument
-            device_id = sys.argv[3] if len(sys.argv) > 3 else None
-            success = upload_to_device(device, device_id)
+            # Optional: custom user ID as third argument
+            user_id = sys.argv[3] if len(sys.argv) > 3 else None
+            success = upload_to_device(device, user_id)
         else:
             success = upload_all()
         
