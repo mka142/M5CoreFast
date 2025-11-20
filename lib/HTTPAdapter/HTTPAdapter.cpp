@@ -116,6 +116,32 @@ int HTTPAdapter::get(const char* url) {
     return httpCode;
 }
 
+// Synchronous GET request with response body
+String HTTPAdapter::getWithResponse(const char* url, int* statusCode) {
+    Serial.print("HTTP GET: ");
+    Serial.println(url);
+    
+    HTTPClient client;
+    client.begin(url);
+    
+    int httpCode = client.GET();
+    String response = "";
+    
+    if (statusCode) {
+        *statusCode = httpCode;
+    }
+    
+    Serial.print("HTTP GET response code: ");
+    Serial.println(httpCode);
+    
+    if (httpCode > 0) {
+        response = client.getString();
+    }
+    
+    client.end();
+    return response;
+}
+
 // Synchronous POST request
 int HTTPAdapter::post(const char* url, const String& payload, const char* contentType) {
     Serial.print("HTTP POST: ");

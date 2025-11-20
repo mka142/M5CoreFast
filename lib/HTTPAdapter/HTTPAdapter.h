@@ -30,6 +30,7 @@ public:
     
     // Synchronous methods for simple requests
     int get(const char* url);  // Returns HTTP status code
+    String getWithResponse(const char* url, int* statusCode = nullptr);  // Returns response body
     int post(const char* url, const String& payload, const char* contentType = "application/json");  // Returns HTTP status code
     
     // Check if adapter is busy
