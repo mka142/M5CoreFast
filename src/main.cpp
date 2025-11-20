@@ -25,6 +25,7 @@
 #include "pages/ChargingPage.h"
 #include "pages/OvationPage.h"
 #include "pages/PieceAnnouncementPage.h"
+#include "pages/PieceListeningPage.h"
 #include "pages/EndOfConcertPage.h"
 #include "pages/FeedbackForm/FeedbackFormPage.h"
 #include "pages/FormFinishedPage.h"
@@ -300,6 +301,7 @@ void setup()
     lv_obj_t *chargingScreen = ChargingPage::create();
     lv_obj_t *ovationScreen = OvationPage::create();
     lv_obj_t *pieceAnnouncementScreen = PieceAnnouncementPage::create();
+    lv_obj_t *pieceListeningScreen = PieceListeningPage::create();
     lv_obj_t *endOfConcertScreen = EndOfConcertPage::create();
     lv_obj_t *feedbackFormScreen = FeedbackFormPage::create();
     lv_obj_t *formFinishedScreen = FormFinishedPage::create();
@@ -319,6 +321,7 @@ void setup()
     navigator.registerScreen(CHARGING, chargingScreen);
     navigator.registerScreen(OVATION, ovationScreen);
     navigator.registerScreen(PIECE_ANNOUNCEMENT, pieceAnnouncementScreen);
+    navigator.registerScreen(PIECE_LISTENING, pieceListeningScreen);
     navigator.registerScreen(END_OF_CONCERT, endOfConcertScreen);
     navigator.registerScreen(END_OF_CONCERT__FEEDBACK_FORM, feedbackFormScreen);
     navigator.registerScreen(END_OF_CONCERT__FORM_FINISHED, formFinishedScreen);
@@ -450,6 +453,7 @@ void setup()
             mqttPageBridge->addPageMapping("TENSION_MEASUREMENT", TENSION_MEASUREMENT);
             mqttPageBridge->addPageMapping("OVATION", OVATION);
             mqttPageBridge->addPageMapping("PIECE_ANNOUNCEMENT", PIECE_ANNOUNCEMENT);
+            mqttPageBridge->addPageMapping("PIECE_LISTENING", PIECE_LISTENING);
             mqttPageBridge->addPageMapping("END_OF_CONCERT", END_OF_CONCERT);
             mqttPageBridge->addPageMapping("END_OF_CONCERT__FEEDBACK_FORM", END_OF_CONCERT__FEEDBACK_FORM);
             mqttPageBridge->addPageMapping("END_OF_CONCERT__FORM_FINISHED", END_OF_CONCERT__FORM_FINISHED);
@@ -503,6 +507,7 @@ void setup()
                     targetPage = PIECE_ANNOUNCEMENT;
                     PieceAnnouncementPage::setPayload(event);
                 }
+                else if (event.eventType == "PIECE_LISTENING") targetPage = PIECE_LISTENING;
                 else if (event.eventType == "END_OF_CONCERT") targetPage = END_OF_CONCERT;
                 else if (event.eventType == "END_OF_CONCERT__FEEDBACK_FORM") targetPage = END_OF_CONCERT__FEEDBACK_FORM;
                 else if (event.eventType == "END_OF_CONCERT__FORM_FINISHED") targetPage = END_OF_CONCERT__FORM_FINISHED;

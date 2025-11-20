@@ -16,6 +16,7 @@ enum PageID
     SLIDER_DEMO__MEASUREMENT,         // Tension measurement demo (sub-page of SLIDER_DEMO)
     CONCERT_START,
     PIECE_ANNOUNCEMENT,
+    PIECE_LISTENING,
     TENSION_MEASUREMENT,
     OVATION,
     // PAGE SET
