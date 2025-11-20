@@ -137,9 +137,9 @@ void BeforeConcertPage::firstRender()
     rgb.setPixel(9, 0xFF, 0x00, 0xFF);
     rgb.show();
 
-    // Start or resume inactivity timer (4s default)
+    // Start or resume inactivity timer (40s default)
     if (!inactivity_timer) {
-        inactivity_timer = lv_timer_create(inactivity_cb, 4000, NULL);
+        inactivity_timer = lv_timer_create(inactivity_cb, 40000, NULL);
     } else {
         lv_timer_resume(inactivity_timer);
     }
