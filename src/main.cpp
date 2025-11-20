@@ -259,7 +259,7 @@ void setup()
 
         Serial.println("11. Initializing RTC...");
         rtc.begin();
-        // rtc.setLocalTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
+        rtc.setLocalTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
         Serial.println("12. RTC initialized!");
     }
     else
@@ -296,6 +296,7 @@ void setup()
     navigator.registerScreen(BEFORE_CONCERT__SPONSORS, sponsorsScreen); 
     navigator.registerScreen(APP_GUIDE, appGuideScreen);
     navigator.registerScreen(SLIDER_DEMO, sliderScreen);
+    navigator.registerScreen(SLIDER_DEMO__MEASUREMENT, tensionScreen);
     navigator.registerScreen(TENSION_MEASUREMENT, tensionScreen);
     navigator.registerScreen(BEFORE_CONCERT__RESEARCH_FORM, researchFormScreen);
     navigator.registerScreen(CHARGING, chargingScreen);
@@ -319,6 +320,9 @@ void setup()
                                    AppGuidePage::firstRender,
                                    AppGuidePage::lastRender);
     navigator.registerPageCallbacks(TENSION_MEASUREMENT,
+                                   TensionMeasurementPage::firstRender,
+                                   TensionMeasurementPage::lastRender);
+    navigator.registerPageCallbacks(SLIDER_DEMO__MEASUREMENT,
                                    TensionMeasurementPage::firstRender,
                                    TensionMeasurementPage::lastRender);
     navigator.registerPageCallbacks(END_OF_CONCERT,
@@ -364,6 +368,7 @@ void setup()
             mqttPageBridge->addPageMapping("BEFORE_CONCERT__RESEARCH_FORM", BEFORE_CONCERT__RESEARCH_FORM);
             mqttPageBridge->addPageMapping("APP_GUIDE", APP_GUIDE);
             mqttPageBridge->addPageMapping("SLIDER_DEMO", SLIDER_DEMO);
+            mqttPageBridge->addPageMapping("SLIDER_DEMO__MEASUREMENT", SLIDER_DEMO__MEASUREMENT);
             mqttPageBridge->addPageMapping("TENSION_MEASUREMENT", TENSION_MEASUREMENT);
             mqttPageBridge->addPageMapping("OVATION", OVATION);
             mqttPageBridge->addPageMapping("PIECE_ANNOUNCEMENT", PIECE_ANNOUNCEMENT);
@@ -373,6 +378,8 @@ void setup()
 
             mqttPageBridge->registerPayloadHandler(OVATION, OvationPage::setPayload);
             mqttPageBridge->registerPayloadHandler(PIECE_ANNOUNCEMENT, PieceAnnouncementPage::setPayload);
+            mqttPageBridge->registerPayloadHandler(TENSION_MEASUREMENT, TensionMeasurementPage::setPayload);
+            mqttPageBridge->registerPayloadHandler(SLIDER_DEMO__MEASUREMENT, TensionMeasurementPage::setPayload);
 
             Serial.println("24. MQTT configured!");
         } else {
@@ -402,7 +409,14 @@ void setup()
                 else if (event.eventType == "BEFORE_CONCERT__RESEARCH_FORM") targetPage = BEFORE_CONCERT__RESEARCH_FORM;
                 else if (event.eventType == "APP_GUIDE") targetPage = APP_GUIDE;
                 else if (event.eventType == "SLIDER_DEMO") targetPage = SLIDER_DEMO;
-                else if (event.eventType == "TENSION_MEASUREMENT") targetPage = TENSION_MEASUREMENT;
+                else if (event.eventType == "SLIDER_DEMO__MEASUREMENT") {
+                    targetPage = SLIDER_DEMO__MEASUREMENT;
+                    TensionMeasurementPage::setPayload(event);
+                }
+                else if (event.eventType == "TENSION_MEASUREMENT") {
+                    targetPage = TENSION_MEASUREMENT;
+                    TensionMeasurementPage::setPayload(event);
+                }
                 else if (event.eventType == "OVATION") {
                     targetPage = OVATION;
                     OvationPage::setPayload(event);
@@ -577,7 +591,7 @@ void loop()
     // ==================== TENSION MEASUREMENT PAGE LOGIC ====================
 
     // Update tension page with encoder value (with momentum physics)
-    if (navigator.getCurrentPage() == TENSION_MEASUREMENT)
+    if (navigator.getCurrentPage() == TENSION_MEASUREMENT || navigator.getCurrentPage() == SLIDER_DEMO__MEASUREMENT)
     {
         int encoderValue = hmi.getEncoderValue();
         int rawDiff = encoderValue - lastEncoderValue;
