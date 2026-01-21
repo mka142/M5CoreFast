@@ -1,0 +1,363 @@
+#!/usr/bin/env python3
+"""
+M5Stack CoreS3 Multi-Device Deployment Tool
+
+Simple tool to detect, build, and upload firmware to multiple M5Stack devices.
+Each device gets a unique USER_ID defined at compile time.
+
+Usage:
+    ./deploy.py list                    - List all connected M5Stack devices
+    ./deploy.py build                   - Build firmware for m5stack-cores3
+    ./deploy.py upload                  - Upload to all devices with auto IDs
+    ./deploy.py upload /dev/ttyACM0     - Upload to specific device
+    ./deploy.py upload /dev/ttyACM0 myuser  - Upload with custom user ID
+    ./deploy.py upload user1,user2,user3    - Upload to all devices
+                                             with specified user IDs
+    ./deploy.py upload /dev/ttyACM0,/dev/ttyACM1 user1,user2
+                                           - Upload to specific devices
+                                             with specified IDs
+
+Examples:
+    # Upload to all detected devices with custom IDs
+    ./deploy.py upload id001,id002,id003
+    
+    # Upload to specific devices with custom IDs
+    ./deploy.py upload /dev/ttyACM0,/dev/ttyACM1 alice,bob
+"""
+
+import subprocess
+import sys
+import os
+import time
+from pathlib import Path
+
+# ANSI color codes
+GREEN = '\033[92m'
+YELLOW = '\033[93m'
+RED = '\033[91m'
+BLUE = '\033[94m'
+RESET = '\033[0m'
+
+def print_success(msg):
+    print(f"{GREEN}✓{RESET} {msg}")
+
+def print_info(msg):
+    print(f"{BLUE}ℹ{RESET} {msg}")
+
+def print_warning(msg):
+    print(f"{YELLOW}⚠{RESET} {msg}")
+
+def print_error(msg):
+    print(f"{RED}✗{RESET} {msg}")
+
+def get_project_root():
+    """Get the project root directory (one level up from deploy/)"""
+    return Path(__file__).parent.parent
+
+def find_platformio():
+    """Find platformio executable in common locations"""
+    # Try common locations
+    locations = [
+        'platformio',  # In PATH
+        'pio',  # Short alias
+        str(Path.home() / '.platformio' / 'penv' / 'bin' / 'platformio'),
+        str(Path.home() / '.platformio' / 'penv' / 'bin' / 'pio'),
+    ]
+    
+    for cmd in locations:
+        try:
+            result = subprocess.run(
+                [cmd, '--version'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return cmd
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+    
+    return None
+
+def detect_m5_devices():
+    """Detect all connected M5Stack devices (usually ttyACM* or ttyUSB*)"""
+    devices = []
+    dev_dir = Path('/dev')
+    
+    # Look for typical M5Stack device patterns
+    patterns = ['ttyACM*', 'ttyUSB*']
+    
+    for pattern in patterns:
+        for device in dev_dir.glob(pattern):
+            # Basic check if device is accessible
+            if device.exists():
+                devices.append(str(device))
+    
+    return sorted(devices)
+
+def list_devices():
+    """List all detected M5Stack devices"""
+    print_info("Scanning for M5Stack devices...")
+    devices = detect_m5_devices()
+    
+    if not devices:
+        print_warning("No devices found!")
+        print_info("Make sure your M5Stack devices are connected via USB")
+        return []
+    
+    print_success(f"Found {len(devices)} device(s):")
+    for i, device in enumerate(devices, 1):
+        print(f"  {i}. {device}")
+    
+    return devices
+
+def build_firmware():
+    """Build the firmware using PlatformIO"""
+    print_info("Building firmware for m5stack-cores3...")
+    
+    pio_cmd = find_platformio()
+    if not pio_cmd:
+        print_error("PlatformIO not found!")
+        print_info("Install it with: pip install platformio")
+        print_info("Or check ~/.platformio/penv/bin/platformio")
+        return False
+    
+    project_root = get_project_root()
+    os.chdir(project_root)
+    
+    try:
+        result = subprocess.run(
+            [pio_cmd, 'run', '--environment', 'm5stack-cores3'],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            print_success("Build successful!")
+            return True
+        else:
+            print_error("Build failed!")
+            print(result.stderr)
+            return False
+    except Exception as e:
+        print_error(f"Build error: {e}")
+        return False
+
+def upload_to_device(device, user_id=None):
+    """Upload firmware to a specific device"""
+    device_name = user_id if user_id else device.split('/')[-1]
+    print_info(f"Uploading to {device} (User ID: {device_name})...")
+    
+    pio_cmd = find_platformio()
+    if not pio_cmd:
+        print_error("PlatformIO not found!")
+        return False
+    
+    project_root = get_project_root()
+    os.chdir(project_root)
+    
+    # Build command with optional user ID
+    cmd = [pio_cmd, 'run', '--target', 'upload',
+           '--environment', 'm5stack-cores3',
+           '--upload-port', device]
+    
+    # Add user ID as environment variable if provided
+    env = os.environ.copy()
+    if user_id:
+        env['PLATFORMIO_BUILD_FLAGS'] = f'-D USER_ID={user_id}'
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env
+        )
+        
+        if result.returncode == 0:
+            print_success(f"Upload to {device} (User ID: {device_name}) "
+                         "successful!")
+            return True
+        else:
+            print_error(f"Upload to {device} failed!")
+            # Show last few lines of error
+            error_lines = result.stderr.split('\n')
+            for line in error_lines[-10:]:
+                if line.strip():
+                    print(f"  {line}")
+            return False
+    except Exception as e:
+        print_error(f"Upload error: {e}")
+        return False
+
+def upload_all():
+    """Upload firmware to all detected devices"""
+    devices = detect_m5_devices()
+    
+    if not devices:
+        print_warning("No devices found to upload to!")
+        return False
+    
+    print_info(f"Uploading to {len(devices)} device(s)...")
+    
+    success_count = 0
+    fail_count = 0
+    
+    # Generate user IDs (user_001, user_002, etc.)
+    for idx, device in enumerate(devices, 1):
+        user_id = f"user_{idx:03d}"
+        if upload_to_device(device, user_id):
+            success_count += 1
+        else:
+            fail_count += 1
+        
+        # Small delay between uploads
+        if device != devices[-1]:
+            time.sleep(1)
+    
+    print("\n" + "="*50)
+    print_info(f"Upload complete: {success_count} success, "
+               f"{fail_count} failed")
+    
+    return fail_count == 0
+
+
+def upload_multiple_with_ids(devices, user_ids):
+    """Upload firmware to multiple devices with specified user IDs"""
+    if len(user_ids) != len(devices):
+        print_error(f"Mismatch: {len(devices)} device(s) but "
+                   f"{len(user_ids)} user ID(s)")
+        print_info("Please provide one user ID per device")
+        return False
+    
+    print_info(f"Uploading to {len(devices)} device(s) with custom IDs...")
+    
+    success_count = 0
+    fail_count = 0
+    
+    for device, user_id in zip(devices, user_ids):
+        if upload_to_device(device, user_id):
+            success_count += 1
+        else:
+            fail_count += 1
+        
+        # Small delay between uploads
+        if device != devices[-1]:
+            time.sleep(1)
+    
+    print("\n" + "="*50)
+    print_info(f"Upload complete: {success_count} success, "
+               f"{fail_count} failed")
+    
+    return fail_count == 0
+
+
+def parse_comma_separated(arg):
+    """Parse comma-separated values, removing quotes and whitespace"""
+    # Remove quotes if present
+    arg = arg.strip('\'"')
+    # Split by comma and clean each item
+    items = [item.strip().strip('\'"') for item in arg.split(',')]
+    return [item for item in items if item]  # Remove empty strings
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
+    
+    command = sys.argv[1].lower()
+    
+    if command == 'list':
+        list_devices()
+    
+    elif command == 'build':
+        success = build_firmware()
+        sys.exit(0 if success else 1)
+    
+    elif command == 'upload':
+        # Parse arguments
+        if len(sys.argv) == 2:
+            # No arguments: upload to all detected devices with auto IDs
+            success = upload_all()
+        elif len(sys.argv) == 3:
+            arg = sys.argv[2]
+            
+            # Check if it's a device path or comma-separated user IDs
+            if ',' in arg and not arg.startswith('/dev/'):
+                # Comma-separated user IDs: upload to all detected devices
+                user_ids = parse_comma_separated(arg)
+                devices = detect_m5_devices()
+                
+                if not devices:
+                    print_error("No devices found!")
+                    sys.exit(1)
+                
+                success = upload_multiple_with_ids(devices, user_ids)
+            elif arg.startswith('/dev/') or os.path.exists(arg):
+                # Single device path
+                if ',' in arg:
+                    # Multiple devices
+                    devices = parse_comma_separated(arg)
+                    # Validate all devices exist
+                    for device in devices:
+                        if not os.path.exists(device):
+                            print_error(f"Device {device} not found!")
+                            sys.exit(1)
+                    # Upload with auto IDs
+                    user_ids = [f"user_{i:03d}" for i in range(1, len(devices) + 1)]
+                    success = upload_multiple_with_ids(devices, user_ids)
+                else:
+                    # Single device with auto ID
+                    success = upload_to_device(arg, None)
+            else:
+                # Assume it's a single user ID for first detected device
+                devices = detect_m5_devices()
+                if not devices:
+                    print_error("No devices found!")
+                    sys.exit(1)
+                success = upload_to_device(devices[0], arg)
+        
+        elif len(sys.argv) == 4:
+            # Two arguments: devices and user IDs
+            devices_arg = sys.argv[2]
+            user_ids_arg = sys.argv[3]
+            
+            # Parse devices
+            if ',' in devices_arg:
+                devices = parse_comma_separated(devices_arg)
+            elif os.path.exists(devices_arg):
+                devices = [devices_arg]
+            else:
+                print_error(f"Device {devices_arg} not found!")
+                sys.exit(1)
+            
+            # Validate all devices exist
+            for device in devices:
+                if not os.path.exists(device):
+                    print_error(f"Device {device} not found!")
+                    sys.exit(1)
+            
+            # Parse user IDs
+            if ',' in user_ids_arg:
+                user_ids = parse_comma_separated(user_ids_arg)
+            else:
+                user_ids = [user_ids_arg]
+            
+            success = upload_multiple_with_ids(devices, user_ids)
+        
+        else:
+            print_error("Too many arguments!")
+            print(__doc__)
+            sys.exit(1)
+        
+        sys.exit(0 if success else 1)
+    
+    else:
+        print_error(f"Unknown command: {command}")
+        print(__doc__)
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,48 @@
+#pragma once
+#include <lvgl.h>
+#include <ThemeColors.h>
+
+// Before concert page with animated text, rotating note, and gradient button
+class BeforeConcertPage {
+public:
+    static lv_obj_t* create();
+    static void firstRender();
+    static void lastRender();
+    static void cleanup();
+    
+    // Form submission checking
+    static bool checkFormSubmitted();
+    static void updateFormButtonState();
+    
+    // Button callback
+    static void on_form_button_clicked(lv_event_t *e);
+    
+    // Animation callbacks
+    static void update_rotation(lv_timer_t *timer);
+    static void update_text(lv_timer_t *timer);
+    static void text_scale_anim_cb(void *var, int32_t value);
+    
+    // Inactivity screensaver support
+    static lv_timer_t* inactivity_timer;
+    static void inactivity_cb(lv_timer_t* t);
+    static void resetInactivityTimer();
+private:
+    static lv_obj_t *screen;
+    static lv_obj_t *note_img;
+    static lv_obj_t *header_label;
+    static lv_obj_t *button;
+    
+    static int rotation_step;
+    static int current_rotation;  // Track absolute rotation position
+    static int text_index;
+    static bool text_scaling_out;
+    static lv_anim_t text_anim;
+    
+    // Text array
+    static const char* header_texts[];
+    static const int header_texts_count;
+    
+    // Rotation increments (always move right/clockwise)
+    static const int rotation_increments[];
+    static const int rotation_increments_count;
+};
